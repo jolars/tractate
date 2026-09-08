@@ -1,4 +1,4 @@
-flavor = "quarto"
+flavor = "gfm"
 
 [flavor-overrides]
 "AGENTS.md" = "gfm"
