@@ -1,0 +1,11 @@
+## First slide
+
+A document can start directly with a slide heading.
+
+### Detail
+
+A deeper heading stays within the slide.
+
+## Second slide
+
+The next level-two heading starts another slide.

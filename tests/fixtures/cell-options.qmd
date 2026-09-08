@@ -1,0 +1,30 @@
+## Cell options
+
+```{r}
+#| label: fig-options
+#| eval: false
+#| echo: false
+#| include: true
+#| results: hide
+#| session: isolated
+#| cache: false
+#| inputs:
+#|   - data/observations.csv
+#| fig-width: 7.5
+#| fig-height: 4
+#| fig-cap: "Observed values: a small sample."
+
+values <- read.csv("data/observations.csv")
+plot(values$value)
+```
+
+```{r}
+#| label: named-session
+#| session: model
+#| eval: true
+#| echo: true
+#| include: false
+#| cache: true
+
+x <- 1
+```

@@ -1,0 +1,49 @@
+---
+title: Source semantics
+subtitle: Markdown and computation
+author: Alex Example
+date: "2026-01-15"
+---
+
+Leading prose with café and α, before the first slide heading.
+
+# Context
+
+This heading belongs to the leading body content.
+
+## Markdown
+
+A paragraph with *emphasis*, **strong text**, `inline code`, and a
+[link](https://example.com/).
+
+### Details
+
+- First item.
+  - Nested item with **strong text**.
+- Second item.
+
+1. First step.
+2. Second step.
+
+## Mathematics
+
+Inline math uses $x + y$ within a paragraph.
+
+$$
+  \bar{x} = \frac{1}{n} \sum_{i=1}^{n} x_i
+$$
+
+## Code
+
+```r
+#| echo: false
+## This is code, not a slide
+x <- 1
+```
+
+```{r}
+#| label: sample-mean
+#| eval: false
+
+mean(c(1, 2, 3))
+```

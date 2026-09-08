@@ -1,0 +1,10 @@
+---
+execute:
+  echo: [
+---
+
+## Malformed defaults
+
+```{r}
+writeLines("executed", "execution-marker")
+```

@@ -1,0 +1,4 @@
+---
+title: Title only
+author: Alex Example
+---

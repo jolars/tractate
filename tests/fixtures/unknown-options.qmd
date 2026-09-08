@@ -1,0 +1,13 @@
+---
+execute:
+  unknown-default: true
+---
+
+## Unknown options
+
+```{r}
+#| label: unknown-options
+#| unknown-cell-option: true
+
+1 + 1
+```

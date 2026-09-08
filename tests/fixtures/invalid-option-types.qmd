@@ -1,0 +1,12 @@
+## Invalid option types
+
+<!-- These values deliberately violate the option types while remaining valid YAML. -->
+<!-- panache-ignore-lint-start -->
+```{r}
+#| eval: "false"
+#| inputs: 42
+#| fig-width: wide
+
+1 + 1
+```
+<!-- panache-ignore-lint-end -->

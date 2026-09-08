@@ -1,0 +1,10 @@
+A leading paragraph without title metadata.
+
+- Leading list content.
+- Another item.
+
+## First slide
+
+## Second slide
+
+Consecutive level-two headings retain the first slide even without body text.

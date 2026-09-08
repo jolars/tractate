@@ -1,0 +1,29 @@
+---
+title: Document defaults
+execute:
+  eval: false
+  echo: false
+  include: true
+  cache: true
+  fig-width: 6
+  fig-height: 4
+---
+
+## Defaults and overrides
+
+<!-- This cell deliberately has no local options so all defaults are inherited. -->
+<!-- panache-ignore-lint-start -->
+```{r}
+x <- 1
+```
+<!-- panache-ignore-lint-end -->
+
+```{r}
+#| label: override
+#| eval: true
+#| echo: true
+#| include: false
+#| fig-width: 8
+
+mean(c(1, 2, 3))
+```

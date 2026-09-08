@@ -1,4 +1,5 @@
 mod common;
+mod source_fixtures;
 
 use common::{Edit, TestProject, assert_matches_full_build, fixture};
 

@@ -1,0 +1,20 @@
+## First slide
+
+```{r}
+#| label: fig-shared
+#| session: first
+
+1 + 1
+```
+
+## Second slide
+
+<!-- A label must remain unique across slides and sessions. -->
+<!-- panache-ignore-lint-start -->
+```{r}
+#| label: fig-shared
+#| session: second
+
+2 + 2
+```
+<!-- panache-ignore-lint-end -->

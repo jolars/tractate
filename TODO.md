@@ -62,10 +62,10 @@ introduced.
 
 ### 1.1 Specify source semantics with fixtures
 
-- [ ] Add fixtures for YAML metadata, title slides, body content before the
+- [x] Add fixtures for YAML metadata, title slides, body content before the
   first level-two heading, level-two slide boundaries, headings, paragraphs,
   lists, math, ordinary code, and executable code.
-- [ ] Add fixtures for `#|` cell options, document defaults, malformed options,
+- [x] Add fixtures for `#|` cell options, document defaults, malformed options,
   unknown options, and duplicate labels.
 - [ ] Lock down the MVP slide rules: nonempty title metadata creates a title
   slide, each level-two heading starts a content slide, and nonempty leading
