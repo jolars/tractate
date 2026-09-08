@@ -32,7 +32,7 @@ The compiler should provide:
 - incremental code execution;
 - live presentation preview;
 - HTML/Reveal.js output;
-- PDF output through Typst;
+- PDF output through Typst after the HTML execution path is established;
 - no dependency on Quarto, knitr, Jupyter, or notebook files.
 
 The Panache parser crate should be reused for parsing Pandoc/Quarto-style
@@ -63,7 +63,8 @@ slide markup.
    ```
    ````
 
-3. Execute R, Python, and Julia directly, without knitr or Jupyter.
+3. Execute R directly, without knitr or Jupyter. The runner protocol should
+   permit Python and Julia support later without changing compiler semantics.
 
 4. Cache computation at cell/session granularity.
 
@@ -71,16 +72,16 @@ slide markup.
 
 6. Provide fast live preview for presentations.
 
-7. Support:
+7. Support, in order:
 
-   - Reveal.js/HTML;
-   - PDF via Typst.
+   - Reveal.js/HTML for the MVP;
+   - PDF via the Typst CLI after the MVP.
 
 8. Make computation results backend-independent.
 
 9. Preserve predictable execution semantics.
 
-10. Build around a persistent dependency graph rather than a batch rendering
+10. Build around a long-lived dependency graph rather than a batch rendering
     pipeline.
 
 ### Non-goals for the initial version
@@ -92,36 +93,63 @@ slide markup.
 - Automatic dependency inference between arbitrary variables in R/Python/Julia.
 - Distributed computation.
 - Interactive widgets.
+- Hermetic execution.
+- Interpreter-state snapshots.
+- Python and Julia execution.
+- PDF output.
 - Supporting every Pandoc output format.
 - Replacing Pandoc generally.
+
+Hermetic execution, interpreter snapshots, Python, Julia, and PDF output are
+deferred from the MVP, not rejected as longer-term features.
 
 --------------------------------------------------------------------------------
 
 # Architecture
 
-The compiler is conceptually:
+The compiler has a pure incremental core and an effectful execution boundary:
 
 ```text
-source
-  │
-  ▼
-Panache parser
-  │
-  ▼
-document model / IR
-  │
-  ├───────────────┐
-  ▼               ▼
-computation       presentation
-graph             graph
-  │               │
-  ▼               ├────────────► HTML / Reveal.js
-language          │
-runners           └────────────► Typst ──► PDF
-  │
-  ▼
-results/artifacts
+revisioned source, files, configuration, and tool identities
+                            │
+                            ▼
+                     Panache parser
+                            │
+                            ▼
+                    source semantic IR
+                            │
+                ┌───────────┴───────────┐
+                ▼                       ▼
+       computation plan          presentation IR
+                │                       │
+                ▼                       ├────────────► HTML / Reveal.js
+       execution requests               │
+                │                       └────────────► Typst ──► PDF
+                ▼
+       scheduler and runners
+                │
+                ▼
+     provisional results/artifacts
+                │
+                ▼
+       revision and key validation
+                │
+                ▼
+          commit or discard
 ```
+
+Parsing, semantic lowering, dependency analysis, and rendering preparation are
+pure transformations. Starting processes, executing user code, reading volatile
+external state, and committing artifacts are effects managed outside the pure
+dependency graph. A dependency-tracking library such as Salsa may implement the
+pure core, but tracked queries must not execute user code.
+
+Every compilation input belongs to a monotonically increasing source revision.
+Every execution request records that revision, its execution key, its required
+predecessor-state key, and a unique attempt ID. A result may be committed only
+if the request is still desired at publication time. Obsolete work may finish,
+but it must not update session state, caches, artifacts visible to renderers, or
+the preview.
 
 Compilation should be driven by dependencies rather than phases that always
 process the entire document.
@@ -140,7 +168,7 @@ one rendered slide changed
 
 with no execution work.
 
-A code edit might result in:
+A code edit in an isolated cell might result in:
 
 ```text
 cell changed
@@ -155,6 +183,10 @@ containing slide invalidated
   ↓
 HTML / Typst output updates
 ```
+
+An incremental build and a clean full build must produce equivalent semantic and
+rendered outputs when execution inputs are deterministic. The full build is the
+correctness oracle; incrementality is an optimization over those semantics.
 
 --------------------------------------------------------------------------------
 
@@ -192,6 +224,13 @@ plot(x)
 
 Do not attempt complete Quarto option compatibility initially.
 
+The semantic lowering layer owns slide boundaries; backends must not infer them
+independently. For the MVP, nonempty title metadata produces a title slide,
+level-two headings begin content slides, and nonempty body content before the
+first level-two heading becomes a content slide. Any additional supported
+boundary syntax must be defined by fixtures. Vertical slide stacks and
+backend-specific boundary rules are deferred.
+
 A small initial option vocabulary is sufficient:
 
 - `label`
@@ -200,14 +239,70 @@ A small initial option vocabulary is sufficient:
 - `include`
 - `results`
 - `session`
+- `cache`
+- `inputs`
 - figure width/height
 - figure caption
+
+One stateful session per language is the default. A named `session` selects a
+different stateful session, while `session: isolated` requests independent
+execution:
+
+````markdown
+```{r}
+#| session: isolated
+summary(read.csv("data.csv"))
+```
+````
+
+Explicit labels must be unique within a document. Unknown options should produce
+diagnostics rather than being silently accepted. Cell options override
+document-level execution defaults where both are supported.
+
+`eval: false` excludes a cell from execution and from its session's cumulative
+state chain. It requires no cached result. Rendering options such as `echo` and
+`include` determine whether its source or result appears; they do not change
+whether preceding or following cells execute.
+
+Each option must declare its invalidation class. For example:
+
+  | Option                   | Primary effect                   |
+  | ------------------------ | -------------------------------- |
+  | `echo`, `include`        | rendering                        |
+  | `session`                | execution-graph structure        |
+  | `label`                  | semantic identity and references |
+  | `eval`                   | execution planning               |
+  | `cache`                  | result-reuse policy              |
+  | `inputs`                 | execution key and file watching  |
+  | raster figure dimensions | execution                        |
+  | figure caption           | rendering and references         |
+
+An option should enter an execution key only when it can change execution or
+captured results. Render-only changes must not execute code.
 
 --------------------------------------------------------------------------------
 
 # Document model
 
-Parsing should produce a semantic document model on top of the Panache CST.
+Parsing should produce a semantic document model on top of the Panache CST. The
+compiler should use distinct layers rather than mutating the source model as
+results arrive:
+
+```text
+Panache CST
+    ↓
+source semantic IR
+    ↓
+evaluation plan plus result references
+    ↓
+backend-independent presentation IR
+    ↓
+HTML IR or Typst IR
+```
+
+Every semantic node should retain an origin in the QMD source. Derived and
+generated nodes should retain an origin chain when possible so that diagnostics
+can be mapped back through every layer.
 
 At minimum:
 
@@ -228,6 +323,11 @@ enum Block {
     // ...
 }
 ```
+
+The example is schematic. The real representation must preserve nested block and
+inline structure, attributes, source origins, and unsupported syntax. Lists,
+callouts, block quotes, notes, and similar constructs cannot be flattened
+without losing rendering semantics.
 
 Presentations should additionally expose slides explicitly:
 
@@ -252,12 +352,14 @@ document IR.
 
 # Incremental compilation
 
-The project should maintain a persistent build graph.
+The preview process should maintain an in-memory build graph across source
+revisions. Persistent execution results and artifacts live in the filesystem
+cache; the dependency graph itself need not survive process restarts initially.
 
 Conceptually:
 
 ```text
-SourceRange
+SourceFile
     ↓
 SyntaxNode
     ↓
@@ -280,12 +382,19 @@ Artifact
 RenderedSlide
 ```
 
-A dependency-tracking system such as Salsa is appropriate, but the exact
-implementation should remain an internal choice.
+A dependency-tracking system such as Salsa is appropriate for this pure graph,
+but the exact implementation should remain an internal choice. Source ranges are
+locations, not stable graph keys.
 
 The important invariant is:
 
-> Unchanged inputs must reuse unchanged outputs.
+> A pure derived value should be reused exactly when its declared inputs remain
+> valid. Effectful execution may be reused only under the explicit
+> cache-validity contract.
+
+The compiler should be able to explain important decisions. At minimum, a
+diagnostic or inspection mode should report why a cell ran, replayed, hit the
+cache, or was invalidated. Invisible cache policy is too difficult to debug.
 
 --------------------------------------------------------------------------------
 
@@ -308,19 +417,28 @@ Conceptually:
 trait Runner {
     fn start(&mut self, config: SessionConfig) -> Result<()>;
 
-    fn execute(&mut self, cell: &Cell) -> Result<CellResult>;
+    fn execute(&mut self, request: ExecutionRequest) -> Result<ExecutionOutcome>;
+
+    fn interrupt(&mut self) -> Result<()>;
 
     fn reset(&mut self) -> Result<()>;
+
+    fn stop(&mut self) -> Result<()>;
 }
 ```
 
-Exact APIs may differ, especially if asynchronous execution is useful.
+Exact APIs may differ, especially because execution and cancellation are
+asynchronous. The lifecycle and state transitions are part of the runner
+contract even if the final Rust trait has a different shape.
 
-Initial languages:
+The initial real runner is R. Before it, a deterministic fake runner should be
+used to test scheduling, invalidation, cancellation races, and artifact commits
+without depending on an interpreter.
 
-1. R
-2. Python
-3. Julia
+Later languages:
+
+1. Python
+2. Julia
 
 Later runners could include:
 
@@ -339,28 +457,42 @@ For example:
 
 ```rust
 struct CellResult {
-    stdout: String,
-    stderr: String,
-    displays: Vec<Display>,
+    events: Vec<OutputEvent>,
     artifacts: Vec<Artifact>,
+    provenance: ExecutionProvenance,
 }
 ```
 
 with:
 
 ```rust
-enum Display {
-    Text(String),
-    Markdown(String),
-    Html(String),
-    Svg(Vec<u8>),
-    Png(Vec<u8>),
-    Table(TableData),
+enum OutputEvent {
+    Stdout(String),
+    Stderr(String),
+    Warning(Diagnostic),
+    Display(DisplayBundle),
+}
+
+struct DisplayBundle {
+    representations: Vec<Representation>,
+    metadata: DisplayMetadata,
 }
 ```
 
+Events retain their original order. A display bundle may contain several
+representations of one value, such as text, HTML, SVG, PNG, or structured table
+data. A renderer selects the best representation it supports. Large binary
+representations should be stored as artifacts and referenced by ID rather than
+held as unbounded in-memory byte vectors.
+
+An execution outcome must distinguish success, failure, and cancellation and
+carry structured diagnostics, duration, runner identity, and the effective
+execution key. Failed and cancelled outcomes must never be published as
+successful cache entries.
+
 This should be deliberately smaller and simpler than the Jupyter messaging
-protocol.
+protocol, but it still needs enough structure to preserve event order and
+backend choices.
 
 Its purpose is to let:
 
@@ -374,11 +506,17 @@ R / Python / Julia
 
 share the same execution results.
 
+Raw HTML is not universally backend-independent. It requires an explicit trust
+policy and a fallback representation for non-HTML backends.
+
 --------------------------------------------------------------------------------
 
 # Language bridges
 
-Each language requires a small runtime shim to capture rich output.
+Each language requires a small runtime shim to capture rich output. The shim
+must communicate over a framed control channel that cannot be confused with user
+stdout or stderr. Requests and events carry session, cell, attempt, and sequence
+identifiers.
 
 ## R
 
@@ -388,15 +526,14 @@ Initially support:
 - stderr;
 - warnings/messages;
 - base graphics;
-- ggplot2 graphics;
-- simple data-frame/table output.
+- ggplot2 graphics.
 
 Graphics can be captured by opening a controlled graphics device around cell
 execution.
 
 ## Python
 
-Initially support:
+Later support:
 
 - stdout;
 - stderr;
@@ -410,7 +547,7 @@ Provide a small injected runtime module if necessary.
 
 ## Julia
 
-Initially support:
+Later support:
 
 - stdout;
 - stderr;
@@ -420,11 +557,49 @@ Initially support:
 
 Use Julia's display mechanisms rather than notebook infrastructure.
 
+Python and Julia are post-MVP runners. Their descriptions constrain the common
+runner protocol but do not enlarge the first implementation milestone.
+
+--------------------------------------------------------------------------------
+
+# Runner lifecycle
+
+A runner adapter owns an interpreter process and its process tree. It must
+define:
+
+- executable discovery and version reporting;
+- runtime-shim negotiation;
+- working directory and inherited environment;
+- startup and per-cell timeouts;
+- whether stdin is disabled or explicitly connected;
+- graceful interruption and forced termination;
+- output and artifact-size limits;
+- crash detection, cleanup, and restart;
+- whether a session remains usable after each failure mode.
+
+An interrupted, crashed, or protocol-invalid stateful runner is poisoned unless
+the adapter can prove that its state remains at a known cumulative state key.
+Recovery otherwise requires a fresh process and prefix replay. Killing work is
+not sufficient by itself; the scheduler must also reject any late result from
+the cancelled attempt.
+
+The initial platform target is Linux and macOS. Windows support is deferred
+until interruption and descendant-process cleanup have an explicit, tested
+implementation.
+
 --------------------------------------------------------------------------------
 
 # Execution semantics
 
-Two execution modes should eventually exist.
+The MVP supports stateful and isolated execution. One stateful session per
+language is the default because it matches the expectation that later cells can
+use values defined by earlier cells. Named sessions create independent stateful
+chains. `session: isolated` opts a cell into independent execution.
+
+Cells in a stateful session are ordered by their semantic document order.
+Moving, inserting, or removing a cell changes the cumulative chain from that
+point onward. Different sessions have no implicit data dependencies, although
+their arbitrary filesystem side effects may still conflict.
 
 ## Isolated cells
 
@@ -440,24 +615,30 @@ C
 
 Changing `B` invalidates only `B`.
 
-This provides the strongest caching guarantees.
+This provides the strongest caching guarantees. Isolated cells may run in
+parallel subject to configured resource limits, but Tractate cannot prove that
+two arbitrary cells do not contend for an undeclared external resource.
 
 A cache key should include at least:
 
 ```text
-language
-runner version
+language and interpreter identity
+Tractate and runtime-shim versions
 source
 execution options
-declared inputs
-relevant environment information
+declared input paths and content digests
+relevant environment variables
+working-directory semantics
+operating system and architecture where relevant
+package or environment lock digest when available
+cache schema version
 ```
 
 --------------------------------------------------------------------------------
 
 ## Stateful sessions
 
-Cells may optionally share interpreter state:
+Cells share interpreter state by default within their language:
 
 ```text
 A → B → C → D
@@ -482,6 +663,9 @@ Changing `C` invalidates `C` and all subsequent cells in that session.
 Do not initially attempt to infer that `D` is independent of `C`.
 
 Conservative forward invalidation gives understandable and correct semantics.
+The scheduler must distinguish logical invalidation from physical execution: an
+unchanged prefix can remain logically valid even when it must be replayed to
+reconstruct interpreter state.
 
 --------------------------------------------------------------------------------
 
@@ -501,15 +685,31 @@ This makes invalidation straightforward.
 
 However, cached output is not equivalent to cached interpreter state.
 
-The initial implementation should therefore prefer correctness over cleverness.
+Every live runner records the cumulative key of the interpreter state it has
+actually materialized. It may execute the next cell directly only when that key
+equals the cell's required predecessor-state key. If not, the MVP must start a
+fresh process and replay the required prefix from `state_0` before executing the
+invalidated suffix.
 
-Possible approaches include:
+For example, after executing `A → B → C → D`, editing `C` does not permit the
+old process to execute the new `C`: the effects of the old `C` and `D` are still
+present. Without a snapshot, correct recovery is:
 
-1. replay unchanged prefix cells when restoring a session;
-2. keep long-lived interpreter processes during preview;
-3. later investigate safe state snapshots where language runtimes support them.
+```text
+reset → replay A → replay B → execute new C → execute D
+```
 
-Persistent interpreter snapshots are not required for the MVP.
+The cached outputs of `A` and `B` can remain valid, but their code still runs
+during replay. Long-lived interpreters avoid startup and replay when their
+materialized key already matches the required state; they do not provide
+rollback. Persistent interpreter snapshots may be investigated later but are not
+part of the MVP.
+
+If replayed prefix code observes time, randomness, the network, or other
+undeclared state, its reconstructed interpreter state may disagree with its
+cached output. Tractate cannot correct this automatically. Authors must make
+such code repeatable, isolate it, or disable caching. The preview should explain
+when physical replay occurred even though a cell remained logically valid.
 
 --------------------------------------------------------------------------------
 
@@ -540,7 +740,7 @@ The system should therefore distinguish between:
 - user-declared external inputs;
 - inherently volatile computation.
 
-Eventually support declarations such as:
+The MVP supports declarations such as:
 
 ```markdown
 #| inputs:
@@ -559,6 +759,17 @@ Also provide an explicit mechanism such as:
 
 for volatile cells.
 
+`cache: false` prevents reuse across executions and process restarts; it does
+not cause an unrelated prose edit to schedule the cell. When a volatile stateful
+cell does execute, its attempt identity enters the cumulative state key so that
+downstream results from a previous state cannot be reused.
+
+Changing a declared input invalidates its consumers and the appropriate stateful
+suffix. Undeclared file, environment, network, clock, random, and process
+dependencies remain the author's responsibility. Direct filesystem writes are
+side effects, not managed artifacts, unless a later explicit output declaration
+adopts them.
+
 Do not claim hermetic execution unless a future sandboxed execution mode
 actually provides it.
 
@@ -572,10 +783,11 @@ artifact store.
 For example:
 
 ```text
-.cache/
-  objects/
-    ab/
-      abcdef...
+.tractate/
+  cache/
+    objects/
+      ab/
+        abcdef...
 ```
 
 References from execution results should use artifact IDs rather than temporary
@@ -588,6 +800,17 @@ Benefits include:
 - backend reuse;
 - atomic replacement;
 - easy garbage collection.
+
+Objects are immutable and verified by content digest when read. An execution
+attempt first writes provisional objects and then atomically commits a result
+record that references them after the revision check succeeds. Partial writes,
+cancelled attempts, and process crashes must not create valid result records.
+
+The store needs a schema version, inter-process locking or an equivalent
+single-writer rule, and garbage-collection roots for current results and active
+builds. Corrupt or incompatible entries should be treated as cache misses, not
+fatal compiler errors. A project-local cache is sufficient initially; a shared
+global store can be considered later.
 
 --------------------------------------------------------------------------------
 
@@ -630,7 +853,12 @@ Slide 17
 During live preview, an edit to slide 17 should send only its new rendered
 representation to the browser.
 
-The preview client can then replace the corresponding DOM subtree.
+The patch protocol carries the source revision and stable slide ID. The client
+applies patches in revision order, replaces the corresponding DOM subtree, and
+asks Reveal.js to resynchronize the affected slide. Structural changes such as
+slide insertion, removal, reordering, or nesting may require deck-level
+synchronization. A full-reload message is the correctness fallback whenever a
+local patch cannot preserve deck state.
 
 The browser should preserve:
 
@@ -642,11 +870,19 @@ The browser should preserve:
 Global changes such as themes or Reveal configuration may require broader
 invalidation.
 
+The initial HTML output is a directory with pinned or bundled Reveal assets and
+a content manifest. The design should not depend on an unversioned CDN. Raw HTML
+and SVG originating in source or execution results must follow the preview trust
+policy.
+
 --------------------------------------------------------------------------------
 
 # Typst / PDF backend
 
 Do not implement a PDF renderer.
+
+PDF output follows the R and Reveal MVP; it is not required to validate the
+initial compiler and execution architecture.
 
 Generate Typst and use Typst for layout and PDF compilation.
 
@@ -674,7 +910,7 @@ Prefer generated modules over one monolithic generated file.
 For example:
 
 ```text
-.build/typst/
+.tractate/build/typst/
   main.typ
   config.typ
   slides/
@@ -702,11 +938,16 @@ slides/0002.typ
 
 Typst can then perform its own incremental layout invalidation.
 
+Generated files should be replaced atomically so that Typst never observes a
+partially written module. The generated tree must define a Typst project root
+that can read its modules and copied or linked artifacts without granting
+unintended access outside that root.
+
 --------------------------------------------------------------------------------
 
 # Typst integration strategy
 
-## MVP
+## First PDF implementation
 
 Use a long-running `typst watch` process.
 
@@ -731,7 +972,11 @@ Potential benefits:
 - source-map integration.
 
 Do not begin with embedded Typst unless the CLI/watch approach proves
-insufficient.
+insufficient. Embedding also couples Tractate to Typst's Rust API and MSRV. It
+requires an explicit decision to raise Tractate's Rust 1.89 baseline, pin an
+older Typst release, or isolate the embedded backend in a separately compiled
+package. The CLI backend preserves the current MSRV and remains the default
+until measured limitations justify that change.
 
 --------------------------------------------------------------------------------
 
@@ -755,6 +1000,45 @@ corresponding Markdown construct where possible.
 
 Source-map support should influence the IR/render architecture early even if
 comprehensive diagnostics come later.
+
+Diagnostics should have a severity, message, primary origin, related origins,
+and stable code. Runner failures whose internal stack frames cannot be mapped to
+QMD should still point to the executable cell that initiated them. Generated
+backend diagnostics must never expose a generated path as the only actionable
+location when a source origin is known.
+
+--------------------------------------------------------------------------------
+
+# Project and file model
+
+The initial compilation unit is one QMD file within a project root. The root
+defaults to the source file's parent directory and may later be overridden by
+configuration. All relative document options, declared inputs, resources, and
+outputs resolve under a single documented path policy. R runners use this
+project root as their working directory.
+
+The compiler input model must include more than QMD text. Presentations may
+depend on:
+
+- images, video, and other media;
+- included Markdown or raw files;
+- stylesheets, scripts, themes, and templates;
+- fonts and bibliography files;
+- declared computational inputs;
+- Reveal.js assets;
+- Typst modules, packages, fonts, and tool identity;
+- generated execution artifacts.
+
+Each discovered file becomes a graph input and, in preview, a watch target.
+Paths should be normalized without erasing symlink or case-sensitivity semantics
+needed by the host platform. Missing or unreadable inputs produce diagnostics
+and remain watched where the platform permits.
+
+Filesystem watching must tolerate atomic-save renames, duplicate events, and
+coalesced edits. Cache and build directories must be excluded to prevent output
+feedback loops. A disk-based preview sees saved content only; future editor
+integration may provide an unsaved in-memory source overlay without changing
+compiler semantics.
 
 --------------------------------------------------------------------------------
 
@@ -797,7 +1081,7 @@ invalidation should correspond to actual dependencies.
 Provide a command such as:
 
 ```sh
-tool preview slides.qmd
+tractate preview slides.qmd
 ```
 
 The preview process owns the long-lived compilation state:
@@ -816,87 +1100,86 @@ renderer
 preview client
 ```
 
-The system should support cancellation.
+Invoking `preview` explicitly authorizes execution. A `--no-execute` mode
+renders only source and reusable cached results. Merely opening or parsing a
+document never starts a runner.
+
+In preview, a missing result under `--no-execute` is shown as unavailable. A
+one-shot `render --no-execute` fails if a required result is absent, because it
+cannot produce the requested complete output.
+
+The system should support cancellation and expose each cell as one of:
+
+- pending;
+- running;
+- succeeded;
+- failed;
+- cancelled;
+- unavailable because execution is disabled and no valid result is cached;
+- stale last-known-good.
 
 If the user edits a cell several times while an old computation is still
-running, obsolete work should be cancelled or its result discarded when it
-completes.
+running, obsolete work should be cancelled when practical and its result
+discarded if it completes. A preview may retain the last successful result after
+a failure, but it must mark that result as stale and display the current
+diagnostic. It must not assemble one apparently successful deck from mutually
+incompatible source revisions.
+
+Syntax or option errors must not execute ambiguously parsed cells. Preview may
+render a recoverable source tree, but affected prior results remain visibly
+stale; one-shot rendering reports failure.
 
 --------------------------------------------------------------------------------
 
 # Build mode
 
-Also provide deterministic one-shot compilation:
+Also provide one-shot compilation:
 
 ```sh
-tool render slides.qmd
+tractate render slides.qmd
 ```
 
 Potential targets:
 
 ```sh
-tool render slides.qmd --to html
-tool render slides.qmd --to pdf
+tractate render slides.qmd --to html
+tractate render slides.qmd --to pdf
 ```
 
 Build mode should reuse the same compiler and execution-cache infrastructure as
-preview mode.
+preview mode. `render` explicitly authorizes execution; `--no-execute` forbids
+new execution. A failed required cell makes the command unsuccessful. Failure in
+one stateful session blocks its suffix, while unrelated sessions may finish to
+provide complete diagnostics.
+
+One-shot orchestration should be predictable, but the command must not claim
+deterministic or reproducible output when user code observes undeclared state.
 
 --------------------------------------------------------------------------------
 
-# Proposed crate structure
+# Proposed module structure
 
-A possible Rust workspace:
+Keep the compiler library and CLI in one Cargo package. Put compiler behavior in
+the library target, use internal modules as boundaries, and keep the binary
+target thin:
 
 ```text
-crates/
-  core/
-      document IR
-      IDs
-      diagnostics
-
-  parser/
-      integration with Panache parser crate
-      CST → semantic model
-
-  compiler/
-      dependency graph
-      invalidation
-      compilation orchestration
-
-  exec/
-      cell model
-      scheduler
-      cache
-      artifact store
-      runner interfaces
-
-  exec-r/
-      R bridge
-
-  exec-python/
-      Python bridge
-
-  exec-julia/
-      Julia bridge
-
-  render-html/
-      HTML / Reveal.js
-
-  render-typst/
-      presentation IR → Typst
-
-  preview/
-      watcher
-      HTTP/WebSocket server
-
-  cli/
-      command-line application
+src/
+  document/       semantic IR, origins, IDs, and diagnostics
+  parser/         Panache integration and semantic lowering
+  compiler/       pure dependency graph and invalidation
+  execution/      plans, scheduler, cache, artifacts, and runner protocol
+  runners/r/      R runtime bridge
+  render/html/    Reveal.js output
+  render/typst/   presentation IR to Typst, after the MVP
+  preview/        watcher, server, and client protocol
+  lib.rs          reusable compiler facade
+  main.rs         thin CLI boundary
 ```
 
-Exact boundaries should evolve as implementation experience accumulates.
-
-Avoid splitting into many crates before useful boundaries emerge.
+Exact module boundaries should evolve as implementation experience accumulates.
+Do not split them into packages without an explicit change to the publication,
+MSRV, or dependency model.
 
 --------------------------------------------------------------------------------
 
@@ -904,7 +1187,15 @@ Avoid splitting into many crates before useful boundaries emerge.
 
 Incrementality depends heavily on retaining identities across edits.
 
-Slides and executable cells should therefore have stable IDs wherever possible.
+Do not conflate three different identities:
+
+  | Identity                         | Purpose                                           |
+  | -------------------------------- | ------------------------------------------------- |
+  | `NodeId`, `SlideId`, or `CellId` | track a semantic entity across revisions          |
+  | `ExecutionKey`                   | decide whether a computation result can be reused |
+  | `ArtifactId`                     | address immutable output bytes                    |
+
+Slides and executable cells should have stable semantic IDs wherever possible.
 
 Explicit labels are ideal:
 
@@ -912,23 +1203,35 @@ Explicit labels are ideal:
 ```{r}
 #| label: fig-regression
 ...
+```
 ````
 
-````
+Labels are document-scoped and unique. Duplicate labels are errors. Changing a
+label may change semantic identity and references without changing the cell's
+execution key.
 
-For unlabeled nodes, derive identities from structural context rather than byte offsets alone.
+For unlabeled nodes, derive live-session identities from structural context and
+matching against the preceding revision rather than byte offsets alone. Matching
+identical nodes can be ambiguous; reuse must remain a best effort and must never
+change semantics.
 
-Moving a cell should ideally not destroy its cached computation merely because its absolute source position changed.
+Moving an isolated cell may preserve computation through its content-derived
+execution key even if its semantic ID changes. Moving a stateful cell changes
+its predecessor chain and therefore its cumulative state key.
 
-This needs careful treatment in the parser/semantic layer.
+Unlabeled semantic IDs need not survive a process restart initially. Persistent
+cache reuse is based on execution keys, not database-local or source-position
+node IDs.
 
----
+--------------------------------------------------------------------------------
 
 # Execution scheduler
 
-Execution should happen independently of rendering.
+Execution should happen independently of rendering and outside pure dependency
+queries.
 
-The scheduler receives invalidated computation nodes and resolves their dependencies.
+The scheduler receives desired execution requests, resolves their dependencies,
+and controls process and resource limits.
 
 For the initial version:
 
@@ -937,13 +1240,21 @@ isolated cells:
     execute independently
 
 stateful session:
-    execute invalidated suffix sequentially
+    reconstruct the required prefix, then execute the suffix sequentially
 
 different sessions:
     may execute concurrently
-````
+```
 
-This naturally allows parallel execution across unrelated cells or sessions.
+This allows parallel execution across unrelated cells or sessions, but
+parallelism is bounded and configurable. Arbitrary cells can still conflict
+through undeclared filesystem or network side effects; scheduling independence
+is not a claim of effect isolation.
+
+On completion, the scheduler first writes provisional artifacts, then verifies
+the source revision, execution key, predecessor-state key, and attempt ID. Only
+a current request may commit a result or advance a session's materialized state
+key. A stale completion is discarded.
 
 --------------------------------------------------------------------------------
 
@@ -952,12 +1263,27 @@ This naturally allows parallel execution across unrelated cells or sessions.
 Opening a document and rendering it must not silently execute arbitrary code
 without a clearly defined trust model.
 
-At minimum:
+The initial trust contract is:
 
-- execution should occur only through an explicit render/preview command;
+- execution occurs only through an explicit `render` or `preview` command;
+- `--no-execute` forbids starting runners;
 - editor parsing/LSP activity must never execute cells;
 - opening an untrusted QMD in an editor must be safe;
-- preview should make execution status visible.
+- preview makes execution and stale-result status visible;
+- preview binds to loopback by default and requires an explicit option for a
+  remote bind;
+- browser connections use an unguessable per-process token;
+- the browser protocol cannot submit arbitrary code or execution requests;
+- artifact serving prevents path traversal and exposes only registered
+  artifacts;
+- raw HTML and SVG are treated as trusted document content in the MVP; the
+  preview app shell still uses an appropriate content security policy where
+  practical.
+
+R processes initially inherit the invoking user's filesystem and network
+authority. Tractate should state this plainly, define its working directory and
+environment inheritance, avoid logging secrets, and place bounds on captured
+output. Explicit invocation is authorization to execute; it is not a sandbox.
 
 Sandboxed execution can be considered later.
 
@@ -965,7 +1291,8 @@ Sandboxed execution can be considered later.
 
 # MVP
 
-The first useful version should be deliberately small.
+The first useful version is an R-first, Reveal-first vertical slice. Typst,
+Python, Julia, and broad rich-output compatibility are deliberately excluded.
 
 ## Source
 
@@ -988,14 +1315,13 @@ Reuse the Panache parser rather than implementing Markdown parsing.
 Support:
 
 - R;
-- Python;
-- Julia;
 - isolated cells;
-- one default stateful session per language;
-- stdout/stderr;
-- figures;
-- basic tables;
-- filesystem-backed cache.
+- one default stateful R session plus named sessions;
+- ordered stdout, stderr, warnings, and errors;
+- base and ggplot2 figures captured as SVG or PNG;
+- declared file inputs;
+- filesystem-backed result and artifact caches;
+- reset-and-replay recovery without interpreter snapshots.
 
 Use conservative forward invalidation for stateful sessions.
 
@@ -1003,15 +1329,17 @@ Use conservative forward invalidation for stateful sessions.
 
 Support:
 
-1. Reveal.js HTML;
-2. Typst/Touying PDF.
+1. Reveal.js HTML.
+
+Structured tables and rich raw-HTML execution results may follow after the
+common display-bundle and trust contracts are proven.
 
 ## Preview
 
 Support:
 
 ```sh
-tool preview slides.qmd
+tractate preview slides.qmd
 ```
 
 with:
@@ -1021,8 +1349,8 @@ with:
 - prose edits performing zero code execution;
 - cached unchanged cells;
 - changed HTML slides replaced live;
-- generated Typst modules updated incrementally;
-- long-running Typst watch for PDF.
+- revision-safe cancellation and stale-result rejection;
+- last-known-good output marked stale after a failure.
 
 --------------------------------------------------------------------------------
 
@@ -1059,21 +1387,83 @@ A → B → C → D
 
 editing `C` should:
 
-- preserve `A` and `B`;
+- preserve the logical results of `A` and `B` when their inputs remain valid;
 - invalidate `C` and `D`;
-- execute the required suffix;
+- reset and replay `A` and `B` when no live runner already represents `state_B`;
+- execute the invalidated suffix;
 - update affected slides.
 
-## Case 4: PDF prose edit
+Instrumentation should distinguish replayed prefix cells from invalidated cells.
+
+## Case 4: declared-input edit
+
+If `C` declares `data.csv` as an input, changing that file should:
+
+- invalidate `C` and the required stateful suffix;
+- leave unrelated sessions valid;
+- never reuse a result keyed by the previous file contents.
+
+## Case 5: rapid edits
+
+If a cell changes from revision 10 to 11 while revision 10 is executing:
+
+- revision 10 should be interrupted when practical;
+- any late revision-10 result should be discarded;
+- only revision 11 may update visible output, the result cache, or session
+  state.
+
+## Case 6: failure and recovery
+
+If a stateful cell fails or its runner crashes:
+
+- its session suffix should not execute;
+- unrelated sessions may finish;
+- preview should retain and mark any last-known-good output as stale;
+- a subsequent valid edit should restart the runner and reconstruct state;
+- no failed or partial result should become a cache hit.
+
+## General correctness criteria
+
+For deterministic inputs, the rendered result after any edit sequence should
+equal a clean full build of the final source. Tests should cover cold and warm
+starts, cancellation, corrupt cache entries, runner crashes, duplicate watcher
+events, and atomic-save renames. A counting fake runner should prove that prose
+edits execute zero cells.
+
+Performance criteria should be expressed as measured latency budgets on a
+representative large presentation. Record parse, semantic update, scheduling,
+rendering, and browser-patch time separately from user computation.
+
+If these cases do not produce a noticeably better workflow than existing Quarto
+preview, reassess the project before expanding scope.
+
+--------------------------------------------------------------------------------
+
+# Implementation sequence
+
+Develop the compiler as a series of vertical proofs:
+
+1. Lower Panache syntax into semantic slides and render static Reveal.js HTML.
+   Establish incremental-versus-full-build equivalence.
+2. Add a deterministic fake runner, revisioned scheduling, artifact storage, and
+   rapid-edit race tests.
+3. Add the R runner, stateful reset-and-replay semantics, stdout/stderr, and
+   SVG/PNG figures.
+4. Add isolated cells, declared inputs, durable cache recovery, and tools that
+   explain invalidation and replay.
+5. Add Typst/Touying output through generated modules and a long-running
+   `typst watch` process.
+6. Add Python and Julia only after the runner protocol has proved portable.
+
+Steps 1 through 4 constitute the MVP. Steps 5 and 6 are post-MVP.
+
+The first Typst acceptance case is:
 
 Editing prose on one slide should:
 
 - rewrite only the relevant generated Typst module;
 - not execute code;
 - allow Typst's persistent compiler to incrementally rebuild the PDF.
-
-If these cases do not produce a noticeably better workflow than existing Quarto
-preview, reassess the project before expanding scope.
 
 --------------------------------------------------------------------------------
 
@@ -1095,25 +1485,36 @@ preview, reassess the project before expanding scope.
 
    A prose edit must not invalidate computation.
 
-5. **Cache at the smallest safe semantic unit.**
+5. **Pure dependency tracking and effects are separate.**
 
-   Prefer cells and sessions over whole-document hashes.
+   Dependency queries decide what is required; runners execute outside those
+   queries, and revision checks govern publication.
 
-6. **Use conservative semantics where dynamic languages make dependency
+6. **Cache at the smallest safe semantic unit.**
+
+   Prefer cells and session prefixes over whole-document hashes. Cached output
+   is not cached interpreter state.
+
+7. **Use conservative semantics where dynamic languages make dependency
    inference unreliable.**
 
-7. **Results are backend-independent.**
+8. **Results are backend-independent display bundles.**
 
-   Execute once; render to HTML or Typst.
+   Execute once and let each backend select a supported representation.
 
-8. **Do not implement PDF layout.**
+9. **Do not implement PDF layout.**
 
    Typst is the PDF compiler.
 
-9. **Incrementality is dependency-driven, not an optimization bolted onto a
-   batch renderer.**
+10. **Incrementality is dependency-driven, not an optimization bolted onto a
+    batch renderer.**
 
-10. **Presentations come first.**
+11. **A clean full build defines correctness.**
+
+    Incremental execution and rendering must agree with it for deterministic
+    inputs.
+
+12. **Presentations come first.**
 
     They provide natural incremental boundaries and a constrained initial
     problem.
@@ -1135,7 +1536,7 @@ support:
 Possible future capabilities include:
 
 - explicit cell dependency DAGs;
-- declared file/environment dependencies;
+- declared environment and output dependencies;
 - deterministic/hermetic execution;
 - remote execution;
 - custom language runners;
