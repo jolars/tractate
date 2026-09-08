@@ -67,7 +67,7 @@ introduced.
   lists, math, ordinary code, and executable code.
 - [x] Add fixtures for `#|` cell options, document defaults, malformed options,
   unknown options, and duplicate labels.
-- [ ] Lock down the MVP slide rules: nonempty title metadata creates a title
+- [x] Lock down the MVP slide rules: nonempty title metadata creates a title
   slide, each level-two heading starts a content slide, and nonempty leading
   body content creates a content slide.
 - [ ] Define the supported option types and their invalidation classes for

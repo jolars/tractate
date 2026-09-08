@@ -1,0 +1,53 @@
+## First slide
+
+<!-- panache-ignore-lint-start -->
+
+# Context
+
+### Detail
+
+<!-- panache-ignore-lint-end -->
+
+#### Subdetail
+
+##### More detail
+
+###### Final detail
+
+> ## Quoted heading
+>
+> This heading stays in its block quote.
+
+- ## List heading
+
+  This heading stays in its list item.
+
+::: {.callout-note}
+## Nested heading
+
+This heading stays in its fenced div.
+:::
+
+```r
+## This is ordinary code
+```
+
+```{r}
+#| label: boundary-comment
+#| eval: false
+
+## This is executable code
+```
+
+--------------------------------------------------------------------------------
+
+A horizontal rule stays on the current slide.
+
+<!-- panache-ignore-format-start -->
+
+Second slide
+------------
+
+<!-- panache-ignore-format-end -->
+
+## Third slide

@@ -1,9 +1,13 @@
-use panache_parser::syntax::{AstNode, CodeBlock, Heading};
+use panache_parser::syntax::{
+    AstNode, CodeBlock, Heading, SyntaxKind, SyntaxNode, YamlMetadata, YamlNode, YamlScalarStyle,
+};
 use panache_parser::{Flavor, ParserOptions, parse_document};
 
 /// A structural summary of a computational Markdown document.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DocumentSummary {
+    /// Number of slides under the MVP title and level-two heading rules.
+    pub slides: usize,
     /// Number of headings in the document.
     pub headings: usize,
     /// Number of fenced code blocks, including executable cells.
@@ -43,12 +47,76 @@ pub fn summarize_document(source: &str) -> DocumentSummary {
     executable_languages.dedup();
 
     DocumentSummary {
+        slides: count_slides(root),
         headings,
         code_blocks,
         executable_cells,
         executable_languages,
         parse_errors: parsed.errors().len(),
     }
+}
+
+fn count_slides(root: &SyntaxNode) -> usize {
+    let mut content_slides = 0;
+
+    // Only document-level blocks define boundaries; nested headings belong to
+    // their containing block and must not split a slide.
+    for node in root.children().filter(has_body_content) {
+        if Heading::cast(node).is_some_and(|heading| heading.level() == 2) || content_slides == 0 {
+            content_slides += 1;
+        }
+    }
+
+    usize::from(has_title(root)) + content_slides
+}
+
+fn has_body_content(node: &SyntaxNode) -> bool {
+    match node.kind() {
+        SyntaxKind::YAML_METADATA
+        | SyntaxKind::BLANK_LINE
+        | SyntaxKind::COMMENT
+        | SyntaxKind::REFERENCE_DEFINITION
+        | SyntaxKind::FOOTNOTE_DEFINITION => false,
+        SyntaxKind::HTML_BLOCK_RAW | SyntaxKind::INLINE_HTML => {
+            !node.text().to_string().trim_start().starts_with("<!--")
+        }
+        SyntaxKind::PARAGRAPH => {
+            node.children().any(|child| has_body_content(&child))
+                || node
+                    .children_with_tokens()
+                    .filter_map(|element| element.into_token())
+                    .any(|token| !token.text().trim().is_empty())
+        }
+        _ => true,
+    }
+}
+
+fn has_title(root: &SyntaxNode) -> bool {
+    root.children()
+        .find_map(YamlMetadata::cast)
+        .and_then(|metadata| metadata.document())
+        .and_then(|document| document.as_node())
+        .and_then(|node| match node {
+            YamlNode::BlockMap(map) => map.value_of("title").and_then(|value| value.as_scalar()),
+            YamlNode::FlowMap(map) => map.value_of("title").and_then(|value| value.as_scalar()),
+            _ => None,
+        })
+        .is_some_and(|title| {
+            let value = title.value();
+            match title.style() {
+                YamlScalarStyle::Plain => {
+                    !matches!(value.trim(), "" | "null" | "Null" | "NULL" | "~")
+                }
+                YamlScalarStyle::SingleQuoted | YamlScalarStyle::DoubleQuoted => {
+                    !value.trim().is_empty()
+                }
+                // Panache retains the block scalar header in the value. Only
+                // its body can supply title content.
+                YamlScalarStyle::Literal | YamlScalarStyle::Folded => {
+                    value.lines().skip(1).any(|line| !line.trim().is_empty())
+                }
+            }
+        })
 }
 
 #[cfg(test)]

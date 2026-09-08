@@ -59,10 +59,20 @@ of every case is also traced for process launches on Linux.
   | `unknown-options.qmd`       | Unknown keys in both document defaults and cell options.                                                                                                                                                                                                        |
   | `duplicate-labels.qmd`      | The same label on cells in different slides and named sessions.                                                                                                                                                                                                 |
 
-The slide cases are inputs for the rules in `DESIGN.md`: a nonempty title
-creates a title slide, each level-two heading starts a content slide, and
-nonempty leading body content creates a content slide. The tests currently
-assert source structure; slide construction remains a separate roadmap item.
+`slide-boundaries.qmd` adds all six heading levels, level-two headings nested in
+quotes, lists, and fenced divs, heading-like code, a horizontal rule, and a
+Setext heading followed by an ATX heading with no body text between them. Local
+Panache directives preserve the Setext spelling and allow the intentional skip
+from a level-one heading to a level-three heading within a slide.
+
+`slide_rules/mod.rs` checks the MVP slide counts through the library summary and CLI.
+The fixture expectations are five slides for `source-content.qmd`, one each for
+`title-only.qmd` and `empty-title.qmd`, two for `no-title.qmd`, and three each
+for `leading-body.qmd` and `slide-boundaries.qmd`. Inline cases cover missing,
+null, empty, whitespace-only, quoted, and multiline titles; empty documents;
+comments and definitions; leading blocks; and empty or consecutive headings. The
+precise rules are in `DESIGN.md`. Explicit slide construction remains a separate
+roadmap item.
 
 Malformed YAML already fails inspection. Invalid option types, unknown keys, and
 duplicate labels are syntactically valid, so inspection currently succeeds.

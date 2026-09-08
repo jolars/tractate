@@ -39,6 +39,7 @@ fn source_fixtures_cover_inspection_without_execution() {
         ("empty-title.qmd", 1, 0, 0, 0),
         ("no-title.qmd", 3, 0, 0, 0),
         ("leading-body.qmd", 2, 0, 0, 0),
+        ("slide-boundaries.qmd", 11, 2, 1, 0),
         ("cell-options.qmd", 1, 2, 2, 0),
         ("document-defaults.qmd", 1, 2, 2, 0),
         ("invalid-option-types.qmd", 1, 1, 1, 0),

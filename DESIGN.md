@@ -225,11 +225,33 @@ plot(x)
 Do not attempt complete Quarto option compatibility initially.
 
 The semantic lowering layer owns slide boundaries; backends must not infer them
-independently. For the MVP, nonempty title metadata produces a title slide,
-level-two headings begin content slides, and nonempty body content before the
-first level-two heading becomes a content slide. Any additional supported
-boundary syntax must be defined by fixtures. Vertical slide stacks and
-backend-specific boundary rules are deferred.
+independently. The MVP uses these rules:
+
+- A nonempty top-level YAML `title` scalar produces one title slide, before any
+  content slides. Missing titles, YAML null values, and scalar values containing
+  only whitespace produce no title slide. Quoted and multiline scalars count as
+  title text; quoted `"null"` is text, while plain `null` is absent. Mappings
+  and sequences do not supply title text. Other metadata cannot create a title
+  slide.
+- Each document-level heading of level two starts a content slide and belongs to
+  that slide. Both ATX (`##`) and Setext (underlined) headings follow this rule.
+  Consecutive headings, including headings with no text, each retain their
+  slide.
+- Nonempty body content before the first level-two heading forms one content
+  slide, after the title slide if present. A body without level-two headings
+  therefore forms at most one content slide. Metadata, blank lines, HTML
+  comments, and link or footnote definitions do not create leading body content.
+- Headings of other levels and headings nested inside quotes, lists, or fenced
+  divs stay in their containing slide. Heading-like text inside code is code.
+  Horizontal rules are body content and do not start additional slides.
+
+An empty document has no slides. These are source rules: counting slides never
+executes cells or depends on computation results. `tractate inspect` reports the
+count, and `tests/slide_rules/mod.rs` locks down these cases. Explicit slide
+construction belongs to semantic lowering.
+
+Any additional supported boundary syntax must be defined by fixtures. Vertical
+slide stacks and backend-specific boundary rules are deferred.
 
 A small initial option vocabulary is sufficient:
 

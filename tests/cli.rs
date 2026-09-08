@@ -1,4 +1,5 @@
 mod common;
+mod slide_rules;
 mod source_fixtures;
 
 use common::{Edit, TestProject, assert_matches_full_build, fixture};
@@ -10,6 +11,7 @@ fn inspect_reports_document_structure() {
 
     assert!(output.status.success(), "stderr: {}", output.stderr);
     let stdout = output.stdout;
+    assert!(stdout.contains("slides: 2\n"));
     assert!(stdout.contains("headings: 1"));
     assert!(stdout.contains("code blocks: 2"));
     assert!(stdout.contains("executable cells: 1"));

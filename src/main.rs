@@ -48,6 +48,7 @@ fn inspect(path: &Path) -> Result<(), String> {
     };
 
     println!("source: {}", path.display());
+    println!("slides: {}", summary.slides);
     println!("headings: {}", summary.headings);
     println!("code blocks: {}", summary.code_blocks);
     println!("executable cells: {}", summary.executable_cells);
