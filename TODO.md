@@ -76,7 +76,7 @@ introduced.
 
 ### 1.2 Introduce the semantic layers
 
-- [ ] Create internal `document`, `parser`, `compiler`, and `render` module
+- [x] Create internal `document`, `parser`, `compiler`, and `render` module
   boundaries while keeping the public facade small.
 - [ ] Lower the Panache CST into a source semantic IR without flattening nested
   block or inline structure.

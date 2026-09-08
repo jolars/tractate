@@ -3,9 +3,11 @@
 ## Project overview
 
 Tractate is a single Rust 2024 crate that provides both a library and the
-`tractate` CLI. `src/document.rs` contains the Panache-backed document model;
-`src/main.rs` is the command-line boundary. Integration tests and their QMD
-fixtures live under `tests/`.
+`tractate` CLI. Internal modules separate document types (`src/document.rs`),
+Panache integration (`src/parser.rs`), and pure compilation (`src/compiler.rs`).
+`src/render.rs` reserves the presentation backend boundary. `src/lib.rs` exposes
+the public facade, and `src/main.rs` is the command-line boundary. Integration
+tests and their QMD fixtures live under `tests/`.
 
 Keep the compiler in one crate. Introduce internal modules as boundaries become
 useful, but do not turn them into separate packages without an explicit change

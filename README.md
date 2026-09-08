@@ -12,9 +12,11 @@ identifies executable cells without running them:
 cargo run -- inspect slides.qmd
 ```
 
-The compiler will grow within this single crate. Its internal modules will keep
-parsing, computation, and backend rendering separate; the planned execution and
-rendering behavior is described in [DESIGN.md](DESIGN.md).
+The compiler lives in a single crate with private `document`, `parser`,
+`compiler`, and `render` modules. The library facade exposes `DocumentSummary`
+and `summarize_document`. The `render` module reserves the boundary for future
+presentation backends; the planned execution and rendering behavior is described
+in [DESIGN.md](DESIGN.md).
 
 ## Development
 
