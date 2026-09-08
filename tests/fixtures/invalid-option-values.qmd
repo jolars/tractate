@@ -1,0 +1,54 @@
+## Invalid option values
+
+<!-- These declarations are valid YAML but invalid under Tractate's option contract. -->
+<!-- panache-ignore-lint-start -->
+```{r}
+#| label: ""
+#| eval: "false"
+#| echo: yes
+#| include: 1
+#| results: asis
+#| session: ""
+#| cache: auto
+#| inputs: data/observations.csv
+#| fig-width: 0
+#| fig-height: -1
+#| fig-cap: [First, Second]
+
+plot(1:3)
+```
+
+```{r}
+#| label: "two words"
+#| eval: null
+#| echo: [1, 2]
+#| include: {}
+#| results: hold
+#| session: false
+#| cache: "true"
+#| inputs: [data/observations.csv, 42, "", null]
+#| fig-width: .inf
+#| fig-height: .nan
+#| fig-cap: false
+
+plot(1:3)
+```
+
+```{r}
+#| label: 42
+#| results: show
+#| session: "two words"
+#| fig-width: "7"
+#| fig-height: 4in
+#| fig-cap: null
+
+plot(1:3)
+```
+
+```{r}
+#| eval:
+#| inputs: { path: data/observations.csv }
+
+plot(1:3)
+```
+<!-- panache-ignore-lint-end -->

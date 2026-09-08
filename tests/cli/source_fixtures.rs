@@ -1,6 +1,6 @@
 use panache_parser::syntax::{
-    AstNode, CodeBlock, DisplayMath, Heading, InlineMath, List, ListKind, SyntaxKind, SyntaxNode,
-    YamlBlockMap, YamlMetadata, YamlNode,
+    AstNode, ChunkOptionSource, CodeBlock, DisplayMath, Heading, InlineMath, List, ListKind,
+    SyntaxKind, SyntaxNode, YamlBlockMap, YamlMetadata, YamlNode, YamlScalarStyle,
 };
 use panache_parser::{Flavor, ParserOptions, parse_document};
 use tractate::summarize_document;
@@ -42,6 +42,8 @@ fn source_fixtures_cover_inspection_without_execution() {
         ("slide-boundaries.qmd", 11, 2, 1, 0),
         ("cell-options.qmd", 1, 2, 2, 0),
         ("document-defaults.qmd", 1, 2, 2, 0),
+        ("option-type-boundaries.qmd", 1, 4, 4, 0),
+        ("invalid-option-values.qmd", 1, 4, 4, 0),
         ("invalid-option-types.qmd", 1, 1, 1, 0),
         ("unknown-options.qmd", 1, 1, 1, 0),
         ("duplicate-labels.qmd", 2, 2, 2, 0),
@@ -77,6 +79,188 @@ fn source_fixtures_cover_inspection_without_execution() {
             "{name}: {output:?}"
         );
     }
+}
+
+#[test]
+fn source_fixtures_preserve_option_type_boundaries_and_origins() {
+    let name = "option-type-boundaries.qmd";
+    let source = fixture(name);
+    let root = parse_fixture(name);
+    let cells: Vec<_> = root
+        .descendants()
+        .filter_map(CodeBlock::cast)
+        .filter_map(|block| block.executable_cell())
+        .collect();
+    let expected = [
+        vec![
+            ("label", "fig-boundaries", YamlScalarStyle::Plain),
+            ("eval", "TRUE", YamlScalarStyle::Plain),
+            ("echo", "False", YamlScalarStyle::Plain),
+            ("include", "true", YamlScalarStyle::Plain),
+            ("results", "markup", YamlScalarStyle::SingleQuoted),
+            ("session", "default", YamlScalarStyle::Plain),
+            ("cache", "false", YamlScalarStyle::Plain),
+            ("fig-width", "7e0", YamlScalarStyle::Plain),
+            ("fig-height", "0.5", YamlScalarStyle::Plain),
+        ],
+        vec![
+            ("label", "fig-empty-caption", YamlScalarStyle::Plain),
+            ("session", "isolated", YamlScalarStyle::SingleQuoted),
+            ("results", "hide", YamlScalarStyle::Plain),
+            ("fig-cap", "", YamlScalarStyle::DoubleQuoted),
+        ],
+        vec![
+            ("label", "fig-literal-caption", YamlScalarStyle::Plain),
+            ("session", "analysis", YamlScalarStyle::Plain),
+        ],
+        vec![("label", "fig-folded-caption", YamlScalarStyle::Plain)],
+    ];
+    assert_eq!(cells.len(), expected.len());
+    for (cell, expected) in cells.iter().zip(expected) {
+        let options = cell.option_declarations();
+        for (key, value, style) in expected {
+            let option = options
+                .iter()
+                .find(|option| option.key() == Some(key))
+                .unwrap();
+            let Some(YamlNode::Scalar(scalar)) = option.yaml_value() else {
+                panic!("scalar option {key}");
+            };
+            assert_eq!(scalar.value(), value, "{key}");
+            assert_eq!(scalar.style(), style, "{key}");
+        }
+        for option in &options {
+            assert_eq!(option.source(), ChunkOptionSource::HashpipeYaml);
+            let range = option.key_range().unwrap();
+            assert_eq!(
+                &source[usize::from(range.start())..usize::from(range.end())],
+                option.key().unwrap()
+            );
+            let range = option.value_range().unwrap();
+            assert_eq!(
+                &source[usize::from(range.start())..usize::from(range.end())],
+                option.raw_value().unwrap()
+            );
+        }
+        assert_eq!(cell.code_source().trim(), "plot(1:3)");
+    }
+
+    for (index, paths) in [
+        (0, vec!["data/observations.csv", "data/observations.csv"]),
+        (1, vec![]),
+    ] {
+        let options = cells[index].option_declarations();
+        let option = options
+            .iter()
+            .find(|option| option.key() == Some("inputs"))
+            .unwrap();
+        let Some(YamlNode::FlowSequence(sequence)) = option.yaml_value() else {
+            panic!("flow input sequence");
+        };
+        assert_eq!(
+            sequence
+                .items()
+                .map(|item| item.as_scalar().unwrap().value())
+                .collect::<Vec<_>>(),
+            paths
+        );
+    }
+
+    for (index, style, content) in [
+        (2, YamlScalarStyle::Literal, "Café and **values**."),
+        (3, YamlScalarStyle::Folded, "A folded caption"),
+    ] {
+        let options = cells[index].option_declarations();
+        let option = options
+            .iter()
+            .find(|option| option.key() == Some("fig-cap"))
+            .unwrap();
+        let Some(YamlNode::Scalar(scalar)) = option.yaml_value() else {
+            panic!("caption scalar");
+        };
+        assert_eq!(scalar.style(), style);
+        assert!(scalar.value().contains(content));
+        assert!(!scalar.value().contains("#|"));
+        assert!(option.raw_value().unwrap().contains("#|"));
+    }
+}
+
+#[test]
+fn source_fixtures_preserve_invalid_values_without_coercion() {
+    let root = parse_fixture("invalid-option-values.qmd");
+    let cells: Vec<_> = root
+        .descendants()
+        .filter_map(CodeBlock::cast)
+        .filter_map(|block| block.executable_cell())
+        .collect();
+    let expected = [
+        vec![
+            ("label", Some(""), true),
+            ("eval", Some("false"), true),
+            ("echo", Some("yes"), false),
+            ("include", Some("1"), false),
+            ("results", Some("asis"), false),
+            ("session", Some(""), true),
+            ("cache", Some("auto"), false),
+            ("inputs", Some("data/observations.csv"), false),
+            ("fig-width", Some("0"), false),
+            ("fig-height", Some("-1"), false),
+            ("fig-cap", None, false),
+        ],
+        vec![
+            ("label", Some("two words"), true),
+            ("eval", Some("null"), false),
+            ("echo", None, false),
+            ("include", None, false),
+            ("results", Some("hold"), false),
+            ("session", Some("false"), false),
+            ("cache", Some("true"), true),
+            ("inputs", None, false),
+            ("fig-width", Some(".inf"), false),
+            ("fig-height", Some(".nan"), false),
+            ("fig-cap", Some("false"), false),
+        ],
+        vec![
+            ("label", Some("42"), false),
+            ("results", Some("show"), false),
+            ("session", Some("two words"), true),
+            ("fig-width", Some("7"), true),
+            ("fig-height", Some("4in"), false),
+            ("fig-cap", Some("null"), false),
+        ],
+        vec![("eval", None, false), ("inputs", None, false)],
+    ];
+    assert_eq!(cells.len(), expected.len());
+    for (cell, expected) in cells.iter().zip(expected) {
+        assert_eq!(
+            cell.option_declarations()
+                .iter()
+                .map(|option| {
+                    (
+                        option.key().unwrap(),
+                        option.cooked_value(),
+                        option.is_quoted(),
+                    )
+                })
+                .collect::<Vec<_>>(),
+            expected
+        );
+    }
+    let options = cells[1].option_declarations();
+    let Some(YamlNode::FlowSequence(inputs)) = options[7].yaml_value() else {
+        panic!("mixed input sequence");
+    };
+    assert_eq!(
+        inputs
+            .items()
+            .map(|item| item.as_scalar().unwrap().value())
+            .collect::<Vec<_>>(),
+        ["data/observations.csv", "42", "", "null"]
+    );
+    assert!(matches!(
+        cells[3].option_declarations()[1].yaml_value(),
+        Some(YamlNode::FlowMap(_))
+    ));
 }
 
 #[test]
@@ -243,11 +427,24 @@ fn source_fixtures_keep_document_defaults_separate_from_cell_overrides() {
         ("echo", "false"),
         ("include", "true"),
         ("cache", "true"),
+        ("results", "hide"),
+        ("session", "analysis"),
         ("fig-width", "6"),
         ("fig-height", "4"),
     ] {
         assert_eq!(scalar(&defaults, key), expected, "{key}");
     }
+    let inputs = defaults
+        .value_of("inputs")
+        .and_then(|value| value.as_block_sequence())
+        .expect("default input sequence");
+    assert_eq!(
+        inputs
+            .items()
+            .map(|item| item.as_scalar().unwrap().value())
+            .collect::<Vec<_>>(),
+        ["data/observations.csv"]
+    );
     let cells: Vec<_> = root
         .descendants()
         .filter_map(CodeBlock::cast)
@@ -266,9 +463,18 @@ fn source_fixtures_keep_document_defaults_separate_from_cell_overrides() {
             (Some("eval"), Some("true")),
             (Some("echo"), Some("true")),
             (Some("include"), Some("false")),
+            (Some("results"), Some("markup")),
+            (Some("session"), Some("default")),
+            (Some("cache"), Some("false")),
+            (Some("inputs"), None),
             (Some("fig-width"), Some("8"))
         ]
     );
+    let options = cells[1].option_declarations();
+    let Some(YamlNode::FlowSequence(inputs)) = options[7].yaml_value() else {
+        panic!("empty local input sequence");
+    };
+    assert_eq!(inputs.items().count(), 0);
 }
 
 #[test]

@@ -253,22 +253,74 @@ construction belongs to semantic lowering.
 Any additional supported boundary syntax must be defined by fixtures. Vertical
 slide stacks and backend-specific boundary rules are deferred.
 
-A small initial option vocabulary is sufficient:
+## Cell option contract
 
-- `label`
-- `eval`
-- `echo`
-- `include`
-- `results`
-- `session`
-- `cache`
-- `inputs`
-- figure width/height
-- figure caption
+The following table defines the complete MVP option vocabulary. These are
+Tractate semantics, independent of the rendering backend. Defaults are explicit
+compiler values, not values inherited from an R installation or graphics device.
+An option marked **Both** is supported in a cell's leading `#|` YAML mapping and
+in the document's top-level `execute` mapping. **Cell** options are local only.
 
-One stateful session per language is the default. A named `session` selects a
-different stateful session, while `session: isolated` requests independent
-execution:
+  | Option       | Supported type and values                                                                           | Built-in default             | Scope | Invalidation class                |
+  | ------------ | --------------------------------------------------------------------------------------------------- | ---------------------------- | ----- | --------------------------------- |
+  | `label`      | Nonempty string without whitespace or control characters.                                           | Absent (unlabeled identity). | Cell  | Semantic identity and references. |
+  | `eval`       | Boolean.                                                                                            | `true`                       | Both  | Execution planning.               |
+  | `echo`       | Boolean.                                                                                            | `true`                       | Both  | Rendering.                        |
+  | `include`    | Boolean.                                                                                            | `true`                       | Both  | Rendering.                        |
+  | `results`    | String enum: `markup` or `hide`.                                                                    | `markup`                     | Both  | Rendering.                        |
+  | `session`    | Nonempty string without whitespace or control characters: `default`, `isolated`, or a session name. | `default`                    | Both  | Execution-graph structure.        |
+  | `cache`      | Boolean.                                                                                            | `true`                       | Both  | Result-reuse policy.              |
+  | `inputs`     | Sequence of nonempty file path strings without NUL characters.                                      | `[]`                         | Both  | Execution key and file watching.  |
+  | `fig-width`  | Finite positive YAML number, in inches.                                                             | `7`                          | Both  | Execution and captured artifacts. |
+  | `fig-height` | Finite positive YAML number, in inches.                                                             | `5`                          | Both  | Execution and captured artifacts. |
+  | `fig-cap`    | String containing Markdown, including multiline text.                                               | Absent (no caption).         | Cell  | Rendering and references.         |
+
+### Values and resolution
+
+Use YAML 1.2 core scalar types. Unquoted `true`, `True`, and `TRUE` are true;
+`false`, `False`, and `FALSE` are false. Quoted booleans, `yes`/`no`, numeric
+booleans, and sequences of line numbers do not satisfy a Boolean option. Quoted
+and block scalars are strings. Plain numbers and booleans do not become strings
+for `label`, `session`, `inputs`, or `fig-cap`. Enum values and names are case
+sensitive. Names are preserved exactly and are not trimmed into validity.
+
+Figure dimensions accept YAML integers and floats, including exponent notation,
+and must remain finite and strictly positive when converted to the runner's
+numeric representation. Zero, negative values, infinities, NaN, quoted numbers,
+unit strings such as `4in`, and dimension vectors are errors. Numerically equal
+dimensions such as `7`, `7.0`, and `7e0` have the same semantic value.
+
+An omitted option inherits its document default, then its built-in default. An
+explicit local value replaces the entire default, including an `inputs`
+sequence; sequences are not appended. `inputs: []` clears inherited inputs. An
+empty or whitespace-only `fig-cap` means no caption. Literal and folded captions
+follow YAML folding and chomping before Markdown lowering. Explicit null,
+including an empty `key:` value, is a type error for every option; it does not
+mean inheritance or reset.
+
+The `execute` value must be a mapping. Validate defaults even when a local
+override would hide them. Reject unknown option keys, keys in the wrong scope
+(including `execute.label` and `execute.fig-cap`), and duplicate keys within one
+mapping. A local override of a document default is not a duplicate. Explicit
+labels must be unique across the document, including across slides and sessions.
+These errors must retain the declaration's QMD origin for semantic diagnostics.
+Unrelated document metadata such as `title` is outside this option vocabulary.
+
+MVP option names use exactly the lowercase, hyphenated spellings in the table.
+Only leading `#|` YAML supplies cell options. R Markdown inline options and
+labels, dotted aliases such as `fig.width`, executable YAML tags such as
+`!expr`, other explicit tags, anchors, aliases, and merge keys are unsupported
+and must be diagnosed during lowering. Parsing them must never evaluate
+expressions. Ordinary fenced code does not supply options, even when its body
+contains `#|`.
+
+### Execution and display behavior
+
+One stateful session per language is the default. `session: default` explicitly
+selects it, including when overriding a named document default. Other names
+select independent stateful sessions scoped to the document and language.
+`default` and `isolated` are reserved, case-sensitive values.
+`session: isolated` requests independent execution:
 
 ````markdown
 ```{r}
@@ -277,30 +329,117 @@ summary(read.csv("data.csv"))
 ```
 ````
 
-Explicit labels must be unique within a document. Unknown options should produce
-diagnostics rather than being silently accepted. Cell options override
-document-level execution defaults where both are supported.
-
 `eval: false` excludes a cell from execution and from its session's cumulative
-state chain. It requires no cached result. Rendering options such as `echo` and
-`include` determine whether its source or result appears; they do not change
-whether preceding or following cells execute.
+state chain. It requires no cached result and displays no prior result or figure
+caption. Its source may still appear. `echo` controls source visibility, and
+`include: false` suppresses all cell presentation: source, textual results,
+figures, and captions. Neither option disables evaluation or output capture.
+Compiler and execution diagnostics remain available even for hidden cells.
 
-Each option must declare its invalidation class. For example:
+`results: markup` presents captured stdout, stderr, and warnings as escaped text
+in event order. `results: hide` suppresses that textual output while retaining
+figure display. Neither changes capture or source visibility. Raw Markdown/HTML
+insertion (`asis`) and regrouping output (`hold`) are outside the MVP. A caption
+applies to each displayed figure from the cell and has no effect if there is no
+figure. Captions are lowered by the compiler, not passed to the runner.
 
-  | Option                   | Primary effect                   |
-  | ------------------------ | -------------------------------- |
-  | `echo`, `include`        | rendering                        |
-  | `session`                | execution-graph structure        |
-  | `label`                  | semantic identity and references |
-  | `eval`                   | execution planning               |
-  | `cache`                  | result-reuse policy              |
-  | `inputs`                 | execution key and file watching  |
-  | raster figure dimensions | execution                        |
-  | figure caption           | rendering and references         |
+`inputs` accepts block and flow sequences. Each path denotes one literal file;
+there is no glob, environment-variable, or tilde expansion. Relative paths
+resolve under the project root, not the current shell directory; absolute paths
+retain their meaning. The normalized paths form a dependency set, so duplicate
+paths and sequence reordering do not change the execution key. File identity and
+content digests enter the key. Apply the project path policy below without
+erasing symlink semantics. Missing, unreadable, or non-file inputs produce
+diagnostics and cannot silently become an empty dependency set. Reading and
+watching files belongs to dependency discovery, not syntax inspection.
 
-An option should enter an execution key only when it can change execution or
-captured results. Render-only changes must not execute code.
+`cache: true` permits reuse when the complete execution contract is valid.
+`cache: false` disables reuse across executions and process restarts. It does
+not repeatedly execute a current cell on unrelated source edits. When a volatile
+stateful cell executes, its attempt identity changes the cumulative state key,
+preventing reuse of results from its previous suffix state.
+
+### Invalidation obligations
+
+Compare resolved semantic values, not YAML spelling or whole option mappings.
+Changing a document default affects only cells whose effective value changes.
+The classes above identify which dependencies must be reconsidered:
+
+- **Rendering** changes invalidate the cell's presentation and affected slide
+  fragments. `echo`, `include`, `results`, and `fig-cap` never enter execution
+  keys or require code to run when the required result is already valid.
+- **Semantic identity and references** changes rebuild identity and reference
+  lookups and their rendered consumers. A `label` rename does not by itself
+  change the computation key. Caption edits also invalidate rendered reference
+  text where it depends on the caption, without changing the figure artifact.
+- **Execution planning** changes add or remove a cell from its plan. Changing
+  `eval` rebuilds the affected stateful suffix because its predecessor chain
+  changes. The Boolean itself is not a computation input for an enabled cell.
+- **Execution-graph structure** changes move a cell between session chains or
+  isolation. Reconsider the old and new stateful suffixes. Session context and
+  required predecessor-state identities participate in execution validity.
+- **Result-reuse policy** changes make the scheduler reconsider reuse; the
+  `cache` Boolean is not a computation input. Switching to `false` schedules a
+  fresh evaluation for an enabled cell. Switching to `true` may retain a valid
+  current result, but does not retroactively make old volatile attempts
+  reusable.
+- **Execution key and file watching** changes update input dependencies and
+  watch targets. Changed paths or file contents invalidate the consuming cell
+  and its stateful suffix. Equivalent dependency sets do not.
+- **Execution and captured artifacts** changes put both effective figure
+  dimensions into the execution key for every enabled cell. This conservative
+  rule covers raster and vector devices, whose layout can both depend on size. A
+  dimension edit invalidates the cell and its stateful suffix even if a prior
+  execution happened not to emit a figure.
+
+Invalidation does not itself authorize execution. Disabled cells never run, and
+`--no-execute` must report an unavailable required result if a newly required
+key cannot be reused. Changes to `label`, `echo`, `include`, `results`, or
+`fig-cap` must preserve valid computation results and artifacts, including for
+`cache: false` cells. Stateful replay requirements still apply when execution is
+needed; output reuse alone does not materialize interpreter state.
+
+### Panache boundary and acceptance cases
+
+Reuse Panache's `ExecutableCell::option_declarations()` and the embedded YAML
+CST for values, styles, declaration sources, and host-document ranges. A
+`cooked_value()` alone cannot distinguish a Boolean from a quoted string or
+represent a sequence. In panache-parser 0.29, block scalar values also retain
+their scalar header and still need context-aware YAML decoding during lowering.
+
+Panache's `resolved_options()` is a broader compatibility helper: it
+canonicalizes case and dotted keys, gives inline options precedence over
+hashpipe options, and reports duplicates within the winning source as ambiguous.
+Tractate must validate raw declarations against its own scopes and vocabulary
+before resolving defaults. Panache's separate Quarto schema linter and formatter
+conversion tables describe Quarto compatibility, not Tractate's execution or
+invalidation contract; they are not part of the panache-parser dependency.
+
+The source fixtures and `tests/cli/source_fixtures.rs` preserve the inputs for
+this contract. `cell-options.qmd` covers every option, `document-defaults.qmd`
+covers inheritance and overrides, and `option-type-boundaries.qmd` adds YAML
+Boolean spellings, exponent dimensions, flow inputs, empty inputs and captions,
+and literal and folded captions. `invalid-option-types.qmd` and
+`invalid-option-values.qmd` preserve wrong types, nulls, invalid enums, empty
+names, mixed input lists, and invalid dimensions. Syntax inspection continues to
+accept syntactically valid declarations; type validation and diagnostics belong
+to semantic lowering.
+
+The incremental compiler and fake-runner stages must turn the following edit
+cases into behavioral tests, each compared with a clean full build:
+
+  | Edit                                                               | Required observation                                                                                                                |
+  | ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
+  | Rename a label or edit `echo`, `include`, `results`, or `fig-cap`. | Update presentation/references as applicable; preserve result keys and artifacts; execute zero cells, also with `cache: false`.     |
+  | Disable a stateful cell with `eval: false`.                        | Remove it from the plan; invalidate its suffix; require no result for the disabled cell.                                            |
+  | Re-enable a cell or move it to another `session`.                  | Rebuild the affected chains and reuse only results with valid session/predecessor identities.                                       |
+  | Change `cache` from `true` to `false`.                             | Execute the enabled cell freshly when authorized; change volatile predecessor identity for its suffix; leave unrelated cells valid. |
+  | Change an input path or its file contents.                         | Update watches; invalidate its consumers and their stateful suffixes.                                                               |
+  | Reorder or repeat identical input paths.                           | Keep dependency identities and results unchanged.                                                                                   |
+  | Change either figure dimension.                                    | Invalidate computation and affected suffixes for raster and vector figures.                                                         |
+  | Rewrite `7` as `7.0`, or change only YAML quoting on a string.     | Preserve effective option values and computation.                                                                                   |
+  | Edit an inherited document default.                                | Apply its class only to cells whose effective value changes; preserve local overrides.                                              |
+  | Make a required execution key unavailable under `--no-execute`.    | Report the missing result without starting a runner.                                                                                |
 
 --------------------------------------------------------------------------------
 

@@ -5,6 +5,10 @@ execute:
   echo: false
   include: true
   cache: true
+  results: hide
+  session: analysis
+  inputs:
+    - data/observations.csv
   fig-width: 6
   fig-height: 4
 ---
@@ -23,6 +27,10 @@ x <- 1
 #| eval: true
 #| echo: true
 #| include: false
+#| results: markup
+#| session: default
+#| cache: false
+#| inputs: []
 #| fig-width: 8
 
 mean(c(1, 2, 3))

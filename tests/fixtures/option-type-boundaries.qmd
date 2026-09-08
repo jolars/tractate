@@ -1,0 +1,48 @@
+## Option type boundaries
+
+<!-- Preserve Boolean spellings, quote styles, and physical caption lines for CST tests. -->
+<!-- panache-ignore-format-start -->
+```{r}
+#| label: fig-boundaries
+#| eval: TRUE
+#| echo: False
+#| include: true
+#| results: 'markup'
+#| session: default
+#| cache: false
+#| inputs: [data/observations.csv, data/observations.csv]
+#| fig-width: 7e0
+#| fig-height: 0.5
+
+plot(1:3)
+```
+
+```{r}
+#| label: fig-empty-caption
+#| session: 'isolated'
+#| results: hide
+#| inputs: []
+#| fig-cap: ""
+
+plot(1:3)
+```
+
+```{r}
+#| label: fig-literal-caption
+#| session: analysis
+#| fig-cap: |-
+#|   Café and **values**.
+#|   A second line with $x$.
+
+plot(1:3)
+```
+
+```{r}
+#| label: fig-folded-caption
+#| fig-cap: >-
+#|   A folded caption
+#|   across two lines.
+
+plot(1:3)
+```
+<!-- panache-ignore-format-end -->

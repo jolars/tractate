@@ -70,7 +70,7 @@ introduced.
 - [x] Lock down the MVP slide rules: nonempty title metadata creates a title
   slide, each level-two heading starts a content slide, and nonempty leading
   body content creates a content slide.
-- [ ] Define the supported option types and their invalidation classes for
+- [x] Define the supported option types and their invalidation classes for
   `label`, `eval`, `echo`, `include`, `results`, `session`, `cache`,
   `inputs`, figure dimensions, and figure captions.
 
