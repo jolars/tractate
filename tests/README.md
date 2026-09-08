@@ -1,7 +1,7 @@
 # Test helpers
 
-Integration tests can import `mod common;` to use the helpers in
-`common/mod.rs`:
+The CLI integration test suite starts at `cli/main.rs` and imports the helpers
+in `cli/common.rs` with `mod common;`:
 
 - `fixture(name)` reads a UTF-8 fixture relative to the crate, independently of
   the test's working directory.
@@ -25,9 +25,9 @@ CLI output with inspection in a new temporary project after each edit.
 Inspection parses from scratch. When the incremental compiler exists, its
 retained state can use the same assertion helper.
 
-On Linux, `common/process.rs` uses `strace` to follow process creation and exec
-calls, including failed attempts and descendants. Only the initial exec of the
-program under test is excluded. A control test deliberately launches a child
+On Linux, `cli/common/process.rs` uses `strace` to follow process creation and
+exec calls, including failed attempts and descendants. Only the initial exec of
+the program under test is excluded. A control test deliberately launches a child
 shell to verify that the tracer detects it. Missing or unusable `strace` fails
 the tests. The development environment and Linux CI install it. Other platforms
 still run the inspection behavior and edit-sequence tests.
@@ -37,7 +37,7 @@ excluded from Panache formatting and linting.
 
 ## Stage 1 source fixtures
 
-`source_fixtures/mod.rs`, included by the CLI integration tests, checks the
+`cli/source_fixtures.rs`, included by the CLI integration tests, checks the
 fixture corpus through inspection and Panache's typed syntax tree. These tests
 verify the inputs needed by semantic lowering: metadata, ordered headings,
 nested Markdown, math, code, option declarations, and source ranges. Inspection
@@ -65,7 +65,7 @@ Setext heading followed by an ATX heading with no body text between them. Local
 Panache directives preserve the Setext spelling and allow the intentional skip
 from a level-one heading to a level-three heading within a slide.
 
-`slide_rules/mod.rs` checks the MVP slide counts through the library summary and CLI.
+`cli/slide_rules.rs` checks the MVP slide counts through the library summary and CLI.
 The fixture expectations are five slides for `source-content.qmd`, one each for
 `title-only.qmd` and `empty-title.qmd`, two for `no-title.qmd`, and three each
 for `leading-body.qmd` and `slide-boundaries.qmd`. Inline cases cover missing,

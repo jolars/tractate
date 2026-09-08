@@ -247,7 +247,7 @@ independently. The MVP uses these rules:
 
 An empty document has no slides. These are source rules: counting slides never
 executes cells or depends on computation results. `tractate inspect` reports the
-count, and `tests/slide_rules/mod.rs` locks down these cases. Explicit slide
+count, and `tests/cli/slide_rules.rs` locks down these cases. Explicit slide
 construction belongs to semantic lowering.
 
 Any additional supported boundary syntax must be defined by fixtures. Vertical
