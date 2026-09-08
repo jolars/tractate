@@ -8,7 +8,8 @@
     pkgs.go-task
     pkgs.panache
     pkgs.taplo
-  ];
+  ]
+  ++ pkgs.lib.optionals pkgs.stdenv.isLinux [ pkgs.strace ];
 
   languages.rust = {
     enable = true;
@@ -25,7 +26,7 @@
 
     panache-format = {
       enable = true;
-      entry = "panache format";
+      entry = "panache format --force-exclude";
       files = "\\.(md|qmd|Rmd)$";
       language = "system";
     };

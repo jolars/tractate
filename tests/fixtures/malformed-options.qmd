@@ -1,0 +1,7 @@
+## Simulation
+
+```{r}
+#| label: [
+
+writeLines("executed", "execution-marker")
+```

@@ -25,6 +25,11 @@ devenv shell
 task check
 ```
 
+On Linux, the inspection safety tests require `strace`, which the development
+environment provides. They trace process creation and execution for valid and
+malformed documents. See [tests/README.md](tests/README.md) for the shared
+fixture and full-build assertion helpers.
+
 To verify the exact archive intended for crates.io:
 
 ```console

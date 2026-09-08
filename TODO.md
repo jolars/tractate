@@ -43,17 +43,17 @@ The repository already has most of this foundation.
 - [x] Distinguish ordinary fenced code from executable fenced code.
 - [x] Provide `tractate inspect` without an execution path.
 - [x] Cover the inspection command with unit and integration tests.
-- [ ] Add a test asserting that malformed input makes `inspect` fail without
+- [x] Add a test asserting that malformed input makes `inspect` fail without
   starting any process.
-- [ ] Add reusable fixture and assertion helpers for full-build and
+- [x] Add reusable fixture and assertion helpers for full-build and
   edit-sequence tests.
 
 ### Gate 0—Safe inspection
 
-- [ ] `tractate inspect tests/fixtures/minimal.qmd` reports the expected
+- [x] `tractate inspect tests/fixtures/minimal.qmd` reports the expected
   structure.
-- [ ] Valid and malformed documents are inspected without executing code.
-- [ ] `task check` passes.
+- [x] Valid and malformed documents are inspected without executing code.
+- [x] `task check` passes.
 
 ## Stage 1—Compile source into a static Reveal deck
 

@@ -1,4 +1,6 @@
 flavor = "gfm"
+# Invalid syntax is intentional in parser regression fixtures.
+exclude = ["tests/fixtures/malformed-*.qmd"]
 
 [flavor-overrides]
 "AGENTS.md" = "gfm"
