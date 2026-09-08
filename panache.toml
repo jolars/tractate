@@ -1,0 +1,11 @@
+flavor = "quarto"
+
+[flavor-overrides]
+"AGENTS.md" = "gfm"
+"CHANGELOG.md" = "gfm"
+"DESIGN.md" = "gfm"
+"README.md" = "gfm"
+
+[formatters]
+rust = "rustfmt"
+toml = "taplo"

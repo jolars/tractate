@@ -1,0 +1,16 @@
+---
+title: Minimal presentation
+---
+
+## Simulation
+
+```r
+x <- 1
+```
+
+```{r}
+#| label: fig-minimal
+#| echo: false
+
+plot(x)
+```

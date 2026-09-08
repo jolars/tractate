@@ -1,0 +1,21 @@
+/target
+
+# Tractate build and execution state
+/.build/
+/.cache/
+
+# devenv
+.devenv*
+devenv.local.nix
+devenv.local.yaml
+
+# direnv and generated hooks
+.direnv/
+.pre-commit-config.yaml
+
+# Nix build outputs
+result
+result-*
+
+# Task
+.task/
