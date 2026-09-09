@@ -116,6 +116,16 @@ cover anonymous and empty sources, invalid UTF-8 ranges, synthesized autolink
 labels, and a chain from generated text through a semantic derivation back to
 QMD. The generated-text case tests provenance independently of a renderer.
 
+The diagnostic tests in `src/parser/tests/diagnostics.rs` check the parser
+adapter and retained diagnostic model. They cover stable codes independent of
+upstream wording, owned messages, QMD ranges for malformed metadata and nested
+cell options with Unicode and CRLF, multiple errors, empty spans, anonymous
+sources, and snapshots retained across revisions. Related origins retain their
+ordering, messages, and source chains, including generated spans. Error counts
+exclude warnings and notes. The quoted-list case exercises only diagnostic
+conversion: Panache 0.29 duplicates a quote marker in that CST, which still
+prevents full semantic lowering for the reproducer and is tracked in `TODO.md`.
+
 Local `panache-ignore-lint` directives surround intentionally invalid types, the
 duplicate label, and the cell with no local options. Formatting remains enabled
 for those regions, and the Rust tests still inspect them.

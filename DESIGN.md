@@ -1195,11 +1195,26 @@ title-slide derivation and a generated Typst span. Synthesized autolink labels
 already use a derivation from the link's source text. Backend emission and
 generated-offset lookup will consume these origins when the backends exist.
 
-Diagnostics should have a severity, message, primary origin, related origins,
-and stable code. Runner failures whose internal stack frames cannot be mapped to
-QMD should still point to the executable cell that initiated them. Generated
-backend diagnostics must never expose a generated path as the only actionable
-location when a source origin is known.
+The internal `Diagnostic` representation carries a severity (`Error`, `Warning`,
+or `Note`), a Tractate-owned `DiagnosticCode`, an owned message, a primary
+`Origin`, and ordered related origins with explanatory messages. Every origin
+retains its source snapshot and any derivation chain. The primary origin's
+`source_span()` supplies the actionable QMD location even when its most recent
+span refers to generated text.
+
+Parser errors enter this representation during lowering. Malformed metadata and
+cell-option YAML use the stable code `syntax.invalid-yaml`; this code identifies
+the category independently of Panache's message wording. Panache's messages and
+QMD byte ranges are retained directly, including container prefixes and line
+endings. The current parser supplies no related locations, so those diagnostics
+have an empty related-origin list. Inspection derives its existing parse-error
+count from error-severity diagnostics. Diagnostic presentation and semantic
+option validation remain later work.
+
+Runner failures whose internal stack frames cannot be mapped to QMD should still
+point to the executable cell that initiated them. Generated backend diagnostics
+must never expose a generated path as the only actionable location when a source
+origin is known.
 
 --------------------------------------------------------------------------------
 

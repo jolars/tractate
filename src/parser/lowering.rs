@@ -1,10 +1,20 @@
+use panache_parser::parser::{SyntaxError, SyntaxErrorSource};
 use panache_parser::syntax::{self as cst, AstNode, BlockNode, InlineNode, SyntaxKind};
 
 use crate::document::*;
 
 pub(crate) struct LoweredSource {
     pub document: SourceDocument,
-    pub parse_errors: usize,
+    pub diagnostics: Vec<Diagnostic>,
+}
+
+impl LoweredSource {
+    pub fn error_count(&self) -> usize {
+        self.diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic.severity == Severity::Error)
+            .count()
+    }
 }
 
 pub(crate) fn lower(source: SourceFile) -> LoweredSource {
@@ -27,8 +37,29 @@ pub(crate) fn lower(source: SourceFile) -> LoweredSource {
     }
     LoweredSource {
         document,
-        parse_errors: parsed.errors().len(),
+        diagnostics: diagnostics(&lowering.source, parsed.errors()),
     }
+}
+
+pub(super) fn diagnostics(source: &SourceFile, errors: &[SyntaxError]) -> Vec<Diagnostic> {
+    errors
+        .iter()
+        .map(|error| Diagnostic {
+            severity: Severity::Error,
+            code: match error.source {
+                SyntaxErrorSource::Yaml => DiagnosticCode::InvalidYaml,
+            },
+            message: error.message.clone(),
+            // Panache already reports offsets in the original QMD, including
+            // container prefixes and hashpipe markers.
+            primary: Origin::Source(
+                source
+                    .span(range(error.range))
+                    .expect("parser diagnostic range must lie on source UTF-8 boundaries"),
+            ),
+            related: Vec::new(),
+        })
+        .collect()
 }
 
 pub(super) fn range(range: cst::TextRange) -> SourceRange {

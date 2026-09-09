@@ -1,11 +1,12 @@
 use super::lower;
 use crate::document::*;
 
+mod diagnostics;
 mod origins;
 
 fn document(source: &str) -> SourceDocument {
     let lowered = lower(SourceFile::anonymous(source));
-    assert_eq!(lowered.parse_errors, 0);
+    assert_eq!(lowered.error_count(), 0);
     lowered.document
 }
 
@@ -297,7 +298,7 @@ fn lowering_preserves_unsupported_structure_and_known_descendants() {
 fn lowering_retains_partial_documents_for_malformed_yaml() {
     let source = include_str!("../../tests/fixtures/malformed-options.qmd");
     let lowered = lower(SourceFile::anonymous(source));
-    assert_eq!(lowered.parse_errors, 1);
+    assert_eq!(lowered.error_count(), 1);
     assert_eq!(lowered.document.source.text(), source);
     let cell = lowered
         .document
@@ -445,7 +446,7 @@ fn lowering_preserves_looseness_within_a_single_list_item() {
 fn lowering_preserves_rejected_duplicate_yaml_verbatim() {
     let source = "---\nexecute:\n  echo: true\n  echo: false\n---\n\n```{r}\n#| label: first\n#| label: second\n1\n```\n";
     let lowered = lower(SourceFile::anonymous(source));
-    assert_eq!(lowered.parse_errors, 2);
+    assert_eq!(lowered.error_count(), 2);
     let metadata = &lowered.document.metadata[0];
     assert!(matches!(metadata.value.kind, YamlKind::Unsupported(_)));
     assert!(

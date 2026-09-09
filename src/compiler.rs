@@ -44,7 +44,7 @@ pub fn summarize_document(source: &str) -> DocumentSummary {
         code_blocks,
         executable_cells,
         executable_languages,
-        parse_errors: lowered.parse_errors,
+        parse_errors: lowered.error_count(),
     }
 }
 

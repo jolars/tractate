@@ -81,7 +81,7 @@ introduced.
 - [x] Lower the Panache CST into a source semantic IR without flattening nested
   block or inline structure.
 - [x] Attach source origins to semantic and generated nodes.
-- [ ] Represent diagnostics with a severity, stable code, message, primary
+- [x] Represent diagnostics with a severity, stable code, message, primary
   origin, and related origins.
 - [ ] Represent presentations and slides explicitly, independently of HTML.
 - [ ] Keep `NodeId`/`SlideId`/`CellId`, `ExecutionKey`, and `ArtifactId` as
@@ -408,6 +408,15 @@ into the MVP workflow.
   protocols.
 - [ ] The clean full build remains the tested semantic and rendered correctness
   oracle.
+
+## Parser follow-ups
+
+- [ ] Fix Panache 0.29's duplicated quote marker for a fenced cell starting a
+  list item inside a block quote. The resulting CST ranges can make source
+  lowering panic. The reproducer in
+  `diagnostics_map_quoted_list_errors_independently_of_cst_ranges` verifies
+  only the diagnostic adapter, whose QMD offsets remain correct. Restore
+  lossless full lowering before Gate 1.
 
 ## After the MVP
 
