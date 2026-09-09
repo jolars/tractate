@@ -3,7 +3,8 @@
 //! Inspection and subsequent compiler passes consume the source semantic IR.
 
 use crate::document::{
-    Block, BlockKind, DocumentSummary, InlineKind, ScalarStyle, SourceDocument, YamlKind,
+    Block, BlockKind, DocumentSummary, InlineKind, ScalarStyle, SourceDocument, SourceFile,
+    YamlKind,
 };
 use crate::parser;
 
@@ -13,7 +14,7 @@ use crate::parser;
 /// code cells.
 #[must_use]
 pub fn summarize_document(source: &str) -> DocumentSummary {
-    let lowered = parser::lower(source);
+    let lowered = parser::lower(SourceFile::anonymous(source));
     let mut headings = 0;
     let mut code_blocks = 0;
     let mut executable_cells = 0;
@@ -55,7 +56,7 @@ fn count_slides(document: &SourceDocument) -> usize {
     for block in document
         .blocks
         .iter()
-        .filter(|block| has_body_content(block, &document.source))
+        .filter(|block| has_body_content(block))
     {
         if matches!(block.kind, BlockKind::Heading { level: 2, .. }) || content_slides == 0 {
             content_slides += 1;
@@ -65,7 +66,7 @@ fn count_slides(document: &SourceDocument) -> usize {
     usize::from(has_title(document)) + content_slides
 }
 
-fn has_body_content(block: &Block, source: &str) -> bool {
+fn has_body_content(block: &Block) -> bool {
     match &block.kind {
         BlockKind::Metadata(_)
         | BlockKind::Comment
@@ -73,7 +74,7 @@ fn has_body_content(block: &Block, source: &str) -> bool {
         | BlockKind::FootnoteDefinition(_) => false,
         BlockKind::Paragraph(inlines) => inlines.iter().any(|inline| match &inline.kind {
             // Written entities are source content even when they decode to whitespace.
-            InlineKind::Text(_) => !inline.range.text(source).trim().is_empty(),
+            InlineKind::Text(_) => !inline.origin.source_span().text().trim().is_empty(),
             InlineKind::Space | InlineKind::SoftBreak | InlineKind::Comment => false,
             _ => true,
         }),

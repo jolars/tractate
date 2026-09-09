@@ -80,7 +80,7 @@ introduced.
   boundaries while keeping the public facade small.
 - [x] Lower the Panache CST into a source semantic IR without flattening nested
   block or inline structure.
-- [ ] Attach source origins to semantic and generated nodes.
+- [x] Attach source origins to semantic and generated nodes.
 - [ ] Represent diagnostics with a severity, stable code, message, primary
   origin, and related origins.
 - [ ] Represent presentations and slides explicitly, independently of HTML.

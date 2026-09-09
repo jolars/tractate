@@ -5,22 +5,12 @@
     reason = "Inspection uses only part of the source IR; later compiler passes consume the retained content."
 )]
 
-/// A half-open UTF-8 byte range in the containing document's original source.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct SourceRange {
-    pub start: usize,
-    pub end: usize,
-}
-
-impl SourceRange {
-    pub fn text(self, source: &str) -> &str {
-        &source[self.start..self.end]
-    }
-}
+use super::{Origin, SourceFile, SourceSpan};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct SourceDocument {
-    pub source: String,
+    pub source: SourceFile,
+    pub origin: Origin,
     pub metadata: Vec<Metadata>,
     pub blocks: Vec<Block>,
 }
@@ -36,7 +26,7 @@ impl SourceDocument {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Block {
-    pub range: SourceRange,
+    pub origin: Origin,
     pub attributes: Vec<Attribute>,
     pub kind: BlockKind,
 }
@@ -94,6 +84,7 @@ impl Block {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct List {
+    pub origin: Origin,
     pub kind: ListKind,
     pub loose: bool,
     pub items: Vec<ListItem>,
@@ -107,7 +98,7 @@ pub(crate) enum ListKind {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ListItem {
-    pub range: SourceRange,
+    pub origin: Origin,
     /// Keeping each original marker also preserves nondecimal ordered lists.
     pub marker: Option<String>,
     pub checked: Option<bool>,
@@ -116,7 +107,7 @@ pub(crate) struct ListItem {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Inline {
-    pub range: SourceRange,
+    pub origin: Origin,
     pub attributes: Vec<Attribute>,
     pub kind: InlineKind,
 }
@@ -165,6 +156,7 @@ impl Inline {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Link {
+    pub origin: Origin,
     pub content: Vec<Inline>,
     pub destination: Option<String>,
     pub title: Option<String>,
@@ -174,7 +166,7 @@ pub(crate) struct Link {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Attribute {
-    pub range: SourceRange,
+    pub origin: Origin,
     pub kind: AttributeKind,
 }
 
@@ -187,21 +179,24 @@ pub(crate) enum AttributeKind {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct RawContent {
+    pub origin: Origin,
     pub format: String,
     pub text: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Code {
+    pub origin: Origin,
     pub language: Option<String>,
     pub source: String,
     /// Code can occupy discontiguous ranges inside quotes and lists.
-    pub segments: Vec<SourceRange>,
+    pub segments: Vec<SourceSpan>,
     pub info: Option<PreservedSyntax>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Cell {
+    pub origin: Origin,
     pub code: Code,
     pub options: Vec<CellOption>,
     /// Retain even malformed or nonmapping preambles for later diagnostics.
@@ -210,11 +205,11 @@ pub(crate) struct Cell {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct CellOption {
-    pub range: SourceRange,
+    pub origin: Origin,
     pub source: OptionSource,
     pub key: Option<String>,
-    pub key_range: Option<SourceRange>,
-    pub value_range: Option<SourceRange>,
+    pub key_span: Option<SourceSpan>,
+    pub value_span: Option<SourceSpan>,
     pub value: Option<YamlValue>,
     pub inline_value: Option<String>,
     pub inline_quoted: bool,
@@ -228,13 +223,13 @@ pub(crate) enum OptionSource {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Metadata {
-    pub range: SourceRange,
+    pub origin: Origin,
     pub value: YamlValue,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct YamlValue {
-    pub range: SourceRange,
+    pub origin: Origin,
     pub properties: Vec<YamlProperty>,
     pub kind: YamlKind,
 }
@@ -268,22 +263,22 @@ pub(crate) enum ScalarStyle {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct YamlEntry {
-    pub range: SourceRange,
+    pub origin: Origin,
     pub key: YamlValue,
     pub value: YamlValue,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct YamlProperty {
-    pub range: SourceRange,
+    pub origin: Origin,
     pub name: String,
 }
 
 /// An unsupported construct keeps its original tree, with known descendants
-/// lowered in place. Raw text is recovered from the containing source document.
+/// lowered in place. Its origin retains the source for verbatim recovery.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct PreservedSyntax {
-    pub range: SourceRange,
+    pub origin: Origin,
     pub name: String,
     pub children: Vec<PreservedChild>,
 }

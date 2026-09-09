@@ -107,6 +107,15 @@ rejection, effective default resolution, or execution invalidation. A local
 `panache-ignore-format` directive preserves the deliberate Boolean spellings,
 quote styles, and physical caption lines in `option-type-boundaries.qmd`.
 
+The internal origin tests in `src/parser/tests/origins.rs` walk every semantic
+node in all QMD fixtures with LF and CRLF line endings, including rejected
+syntax. They verify that origins and code/option spans share the correct source
+snapshot, that nested Unicode declarations retain precise locations, and that
+origins survive edits and dropping the containing document. Additional cases
+cover anonymous and empty sources, invalid UTF-8 ranges, synthesized autolink
+labels, and a chain from generated text through a semantic derivation back to
+QMD. The generated-text case tests provenance independently of a renderer.
+
 Local `panache-ignore-lint` directives surround intentionally invalid types, the
 duplicate label, and the cell with no local options. Formatting remains enabled
 for those regions, and the Rust tests still inspect them.

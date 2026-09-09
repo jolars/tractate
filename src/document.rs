@@ -1,7 +1,9 @@
 //! Backend-independent document types shared by the compiler and its callers.
 
+mod origin;
 mod source;
 
+pub(crate) use origin::*;
 pub(crate) use source::*;
 
 /// A structural summary of a computational Markdown document.

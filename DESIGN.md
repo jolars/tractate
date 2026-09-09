@@ -491,19 +491,27 @@ callouts, block quotes, notes, and similar constructs cannot be flattened
 without losing rendering semantics.
 
 The current source IR is internal and owns its data independently of Panache.
-Inspection consumes this model. Blocks and inlines retain their nesting and
-document-relative UTF-8 byte ranges, with the original source stored once for
-verbatim recovery. Unsupported constructs preserve their child structure, and
-recognized descendants remain available to inspection. Display math can occur
+Inspection consumes this model. Every semantic node retains an `Origin`,
+including nested blocks and inlines, attributes, list items, code and cell
+declarations, YAML entries and properties, and preserved unsupported syntax.
+Recognized descendants remain available to inspection. Display math can occur
 inside a paragraph without losing its display mode or surrounding prose.
+
+A source origin holds a `SourceSpan`: a validated half-open UTF-8 byte range and
+a shared, immutable `SourceFile` snapshot. The snapshot stores the supplied path
+and original text once. Creating it does not read or canonicalize a path.
+String-only inspection uses an anonymous snapshot. Clones share snapshot
+identity; a new snapshot is distinct even at the same path, so retained nodes
+continue to resolve against their own source after an edit. Snapshot identity is
+not semantic node identity or a computation cache key. Discontiguous code
+segments and option key/value spans retain the same file snapshot.
 
 Metadata and cell options remain declarations at this stage. Their order, YAML
 shape and scalar style, and source ranges are retained without resolving
 defaults or applying the option contract. When Panache rejects YAML before
 building its structured tree, including duplicate mapping keys, the IR retains
 the rejected source as unsupported syntax and inspection reports the parser
-errors. Full source-file identities, generated-origin chains, and semantic
-diagnostics remain subsequent work.
+errors. Option resolution and semantic diagnostics remain subsequent work.
 
 Presentations should additionally expose slides explicitly:
 
@@ -1176,6 +1184,16 @@ corresponding Markdown construct where possible.
 
 Source-map support should influence the IR/render architecture early even if
 comprehensive diagnostics come later.
+
+The internal `Origin` type supports a source span or a derivation with an
+operation name, a parent origin, and an optional generated span. Semantic
+transformations without physical output use a derivation without a span;
+generated nodes add their output file and range. Each step retains its parent,
+and `source_span()` follows the complete chain to the initiating QMD location.
+For example, a title metadata value can remain the source origin through a
+title-slide derivation and a generated Typst span. Synthesized autolink labels
+already use a derivation from the link's source text. Backend emission and
+generated-offset lookup will consume these origins when the backends exist.
 
 Diagnostics should have a severity, message, primary origin, related origins,
 and stable code. Runner failures whose internal stack frames cannot be mapped to

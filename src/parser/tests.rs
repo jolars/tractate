@@ -1,8 +1,10 @@
 use super::lower;
 use crate::document::*;
 
+mod origins;
+
 fn document(source: &str) -> SourceDocument {
-    let lowered = lower(source);
+    let lowered = lower(SourceFile::anonymous(source));
     assert_eq!(lowered.parse_errors, 0);
     lowered.document
 }
@@ -136,15 +138,27 @@ fn lowering_keeps_decoded_text_breaks_and_source_ranges() {
     assert!(!text.contains("&amp;"));
     assert!(!text.contains('>'));
     for inline in inlines {
-        assert!(source.get(inline.range.start..inline.range.end).is_some());
-        assert!(inline.range.start >= blocks[0].range.start);
-        assert!(inline.range.end <= blocks[0].range.end);
+        assert!(
+            source
+                .get(
+                    inline.origin.source_span().range().start
+                        ..inline.origin.source_span().range().end
+                )
+                .is_some()
+        );
+        assert!(
+            inline.origin.source_span().range().start
+                >= blocks[0].origin.source_span().range().start
+        );
+        assert!(
+            inline.origin.source_span().range().end <= blocks[0].origin.source_span().range().end
+        );
     }
     let escaped = inlines
         .iter()
         .find(|inline| matches!(&inline.kind, InlineKind::Text(text) if text == "*"))
         .unwrap();
-    assert_eq!(escaped.range.text(&doc.source), "\\*");
+    assert_eq!(escaped.origin.source_span().text(), "\\*");
 }
 
 #[test]
@@ -163,15 +177,15 @@ fn lowering_separates_code_from_options_and_container_prefixes() {
         cell.code
             .segments
             .iter()
-            .map(|range| range.text(source))
+            .map(|range| range.text())
             .collect::<String>(),
         cell.code.source
     );
     assert_eq!(cell.options.len(), 2);
     assert_eq!(cell.options[0].key.as_deref(), Some("label"));
     assert_eq!(scalar(cell.options[0].value.as_ref().unwrap()).0, "café");
-    assert_eq!(cell.options[0].key_range.unwrap().text(source), "label");
-    assert_eq!(cell.options[0].value_range.unwrap().text(source), "café");
+    assert_eq!(cell.options[0].key_span.as_ref().unwrap().text(), "label");
+    assert_eq!(cell.options[0].value_span.as_ref().unwrap().text(), "café");
     let BlockKind::Code(code) = &doc.blocks[1].kind else {
         panic!("ordinary code")
     };
@@ -217,17 +231,25 @@ fn lowering_preserves_metadata_and_unresolved_option_declarations() {
         scalar(cell.options[2].value.as_ref().unwrap()),
         ("false", ScalarStyle::Plain)
     );
-    assert!(cell.options[3].range.text(source).contains("!expr"));
+    assert!(
+        cell.options[3]
+            .origin
+            .source_span()
+            .text()
+            .contains("!expr")
+    );
     assert_eq!(
         cell.options[3].value.as_ref().unwrap().properties[0]
-            .range
-            .text(source),
+            .origin
+            .source_span()
+            .text(),
         "!expr"
     );
     assert_eq!(
         cell.options[4].value.as_ref().unwrap().properties[0]
-            .range
-            .text(source),
+            .origin
+            .source_span()
+            .text(),
         "&data"
     );
     assert!(
@@ -235,8 +257,9 @@ fn lowering_preserves_metadata_and_unresolved_option_declarations() {
             .value
             .as_ref()
             .unwrap()
-            .range
-            .text(source)
+            .origin
+            .source_span()
+            .text()
             .contains("*data")
     );
     assert_eq!(
@@ -253,7 +276,7 @@ fn lowering_preserves_unsupported_structure_and_known_descendants() {
         panic!("unsupported definition list")
     };
     assert_eq!(syntax.name, "DEFINITION_LIST");
-    assert!(syntax.range.text(source).starts_with("Term\n:"));
+    assert!(syntax.origin.source_span().text().starts_with("Term\n:"));
     assert!(!syntax.children.is_empty());
     let mut headings = 0;
     let mut cells = 0;
@@ -273,9 +296,9 @@ fn lowering_preserves_unsupported_structure_and_known_descendants() {
 #[test]
 fn lowering_retains_partial_documents_for_malformed_yaml() {
     let source = include_str!("../../tests/fixtures/malformed-options.qmd");
-    let lowered = lower(source);
+    let lowered = lower(SourceFile::anonymous(source));
     assert_eq!(lowered.parse_errors, 1);
-    assert_eq!(lowered.document.source, source);
+    assert_eq!(lowered.document.source.text(), source);
     let cell = lowered
         .document
         .blocks
@@ -289,8 +312,9 @@ fn lowering_retains_partial_documents_for_malformed_yaml() {
         cell.preamble
             .as_ref()
             .unwrap()
-            .range
-            .text(source)
+            .origin
+            .source_span()
+            .text()
             .contains("#|")
     );
 }
@@ -420,14 +444,15 @@ fn lowering_preserves_looseness_within_a_single_list_item() {
 #[test]
 fn lowering_preserves_rejected_duplicate_yaml_verbatim() {
     let source = "---\nexecute:\n  echo: true\n  echo: false\n---\n\n```{r}\n#| label: first\n#| label: second\n1\n```\n";
-    let lowered = lower(source);
+    let lowered = lower(SourceFile::anonymous(source));
     assert_eq!(lowered.parse_errors, 2);
     let metadata = &lowered.document.metadata[0];
     assert!(matches!(metadata.value.kind, YamlKind::Unsupported(_)));
     assert!(
         metadata
-            .range
-            .text(source)
+            .origin
+            .source_span()
+            .text()
             .contains("  echo: true\n  echo: false")
     );
     let BlockKind::Cell(cell) = &lowered.document.blocks[0].kind else {
@@ -436,7 +461,7 @@ fn lowering_preserves_rejected_duplicate_yaml_verbatim() {
     let preamble = cell.preamble.as_ref().unwrap();
     assert!(matches!(preamble.kind, YamlKind::Unsupported(_)));
     assert_eq!(
-        preamble.range.text(source),
+        preamble.origin.source_span().text(),
         "#| label: first\n#| label: second\n"
     );
 }
@@ -505,8 +530,9 @@ fn lowering_handles_all_existing_source_fixtures() {
                     actual.push((option.key.clone(), value));
                     assert!(
                         option
-                            .range
-                            .text(source)
+                            .origin
+                            .source_span()
+                            .text()
                             .contains(option.key.as_deref().unwrap()),
                         "{name}"
                     );
