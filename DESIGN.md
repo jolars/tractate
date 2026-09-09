@@ -490,6 +490,21 @@ inline structure, attributes, source origins, and unsupported syntax. Lists,
 callouts, block quotes, notes, and similar constructs cannot be flattened
 without losing rendering semantics.
 
+The current source IR is internal and owns its data independently of Panache.
+Inspection consumes this model. Blocks and inlines retain their nesting and
+document-relative UTF-8 byte ranges, with the original source stored once for
+verbatim recovery. Unsupported constructs preserve their child structure, and
+recognized descendants remain available to inspection. Display math can occur
+inside a paragraph without losing its display mode or surrounding prose.
+
+Metadata and cell options remain declarations at this stage. Their order, YAML
+shape and scalar style, and source ranges are retained without resolving
+defaults or applying the option contract. When Panache rejects YAML before
+building its structured tree, including duplicate mapping keys, the IR retains
+the rejected source as unsupported syntax and inspection reports the parser
+errors. Full source-file identities, generated-origin chains, and semantic
+diagnostics remain subsequent work.
+
 Presentations should additionally expose slides explicitly:
 
 ```rust

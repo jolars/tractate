@@ -1,13 +1,11 @@
 //! Pure document analysis and compilation.
 //!
-//! Inspection currently reads the CST directly. Semantic lowering will supply
-//! the source IR as the document model grows.
+//! Inspection and subsequent compiler passes consume the source semantic IR.
 
-use crate::document::DocumentSummary;
-use crate::parser;
-use panache_parser::syntax::{
-    AstNode, CodeBlock, Heading, SyntaxKind, SyntaxNode, YamlMetadata, YamlNode, YamlScalarStyle,
+use crate::document::{
+    Block, BlockKind, DocumentSummary, InlineKind, ScalarStyle, SourceDocument, YamlKind,
 };
+use crate::parser;
 
 /// Parse Quarto-flavored Markdown and report its computational structure.
 ///
@@ -15,93 +13,94 @@ use panache_parser::syntax::{
 /// code cells.
 #[must_use]
 pub fn summarize_document(source: &str) -> DocumentSummary {
-    let parsed = parser::parse(source);
-    let root = parsed.document().syntax();
-    let headings = root.descendants().filter_map(Heading::cast).count();
+    let lowered = parser::lower(source);
+    let mut headings = 0;
     let mut code_blocks = 0;
     let mut executable_cells = 0;
     let mut executable_languages = Vec::new();
 
-    for block in root.descendants().filter_map(CodeBlock::cast) {
-        code_blocks += 1;
-        if let Some(cell) = block.executable_cell() {
-            executable_cells += 1;
-            if let Some(language) = cell.language() {
-                executable_languages.push(language);
+    lowered
+        .document
+        .visit_blocks(&mut |block| match &block.kind {
+            BlockKind::Heading { .. } => headings += 1,
+            BlockKind::Code(_) => code_blocks += 1,
+            BlockKind::Cell(cell) => {
+                code_blocks += 1;
+                executable_cells += 1;
+                if let Some(language) = &cell.code.language {
+                    executable_languages.push(language.clone());
+                }
             }
-        }
-    }
+            _ => {}
+        });
 
     executable_languages.sort_unstable();
     executable_languages.dedup();
 
     DocumentSummary {
-        slides: count_slides(root),
+        slides: count_slides(&lowered.document),
         headings,
         code_blocks,
         executable_cells,
         executable_languages,
-        parse_errors: parsed.errors().len(),
+        parse_errors: lowered.parse_errors,
     }
 }
 
-fn count_slides(root: &SyntaxNode) -> usize {
+fn count_slides(document: &SourceDocument) -> usize {
     let mut content_slides = 0;
 
     // Only document-level blocks define boundaries; nested headings belong to
     // their containing block and must not split a slide.
-    for node in root.children().filter(has_body_content) {
-        if Heading::cast(node).is_some_and(|heading| heading.level() == 2) || content_slides == 0 {
+    for block in document
+        .blocks
+        .iter()
+        .filter(|block| has_body_content(block, &document.source))
+    {
+        if matches!(block.kind, BlockKind::Heading { level: 2, .. }) || content_slides == 0 {
             content_slides += 1;
         }
     }
 
-    usize::from(has_title(root)) + content_slides
+    usize::from(has_title(document)) + content_slides
 }
 
-fn has_body_content(node: &SyntaxNode) -> bool {
-    match node.kind() {
-        SyntaxKind::YAML_METADATA
-        | SyntaxKind::BLANK_LINE
-        | SyntaxKind::COMMENT
-        | SyntaxKind::REFERENCE_DEFINITION
-        | SyntaxKind::FOOTNOTE_DEFINITION => false,
-        SyntaxKind::HTML_BLOCK_RAW | SyntaxKind::INLINE_HTML => {
-            !node.text().to_string().trim_start().starts_with("<!--")
-        }
-        SyntaxKind::PARAGRAPH => {
-            node.children().any(|child| has_body_content(&child))
-                || node
-                    .children_with_tokens()
-                    .filter_map(|element| element.into_token())
-                    .any(|token| !token.text().trim().is_empty())
-        }
+fn has_body_content(block: &Block, source: &str) -> bool {
+    match &block.kind {
+        BlockKind::Metadata(_)
+        | BlockKind::Comment
+        | BlockKind::ReferenceDefinition(_)
+        | BlockKind::FootnoteDefinition(_) => false,
+        BlockKind::Paragraph(inlines) => inlines.iter().any(|inline| match &inline.kind {
+            // Written entities are source content even when they decode to whitespace.
+            InlineKind::Text(_) => !inline.range.text(source).trim().is_empty(),
+            InlineKind::Space | InlineKind::SoftBreak | InlineKind::Comment => false,
+            _ => true,
+        }),
         _ => true,
     }
 }
 
-fn has_title(root: &SyntaxNode) -> bool {
-    root.children()
-        .find_map(YamlMetadata::cast)
-        .and_then(|metadata| metadata.document())
-        .and_then(|document| document.as_node())
-        .and_then(|node| match node {
-            YamlNode::BlockMap(map) => map.value_of("title").and_then(|value| value.as_scalar()),
-            YamlNode::FlowMap(map) => map.value_of("title").and_then(|value| value.as_scalar()),
-            _ => None,
+fn has_title(document: &SourceDocument) -> bool {
+    document
+        .metadata
+        .first()
+        .and_then(|metadata| metadata.value.mapping())
+        .and_then(|entries| {
+            entries.iter().find(
+                |entry| matches!(&entry.key.kind, YamlKind::Scalar { text, .. } if text == "title"),
+            )
         })
-        .is_some_and(|title| {
-            let value = title.value();
-            match title.style() {
-                YamlScalarStyle::Plain => {
-                    !matches!(value.trim(), "" | "null" | "Null" | "NULL" | "~")
-                }
-                YamlScalarStyle::SingleQuoted | YamlScalarStyle::DoubleQuoted => {
-                    !value.trim().is_empty()
-                }
+        .is_some_and(|entry| {
+            let YamlKind::Scalar { text: value, style } = &entry.value.kind else {
+                return false;
+            };
+            match style {
+                ScalarStyle::Plain => !matches!(value.trim(), "" | "null" | "Null" | "NULL" | "~"),
+                ScalarStyle::SingleQuoted | ScalarStyle::DoubleQuoted => !value.trim().is_empty(),
                 // Panache retains the block scalar header in the value. Only
                 // its body can supply title content.
-                YamlScalarStyle::Literal | YamlScalarStyle::Folded => {
+                ScalarStyle::Literal | ScalarStyle::Folded => {
                     value.lines().skip(1).any(|line| !line.trim().is_empty())
                 }
             }

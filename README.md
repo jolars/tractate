@@ -5,8 +5,9 @@ Quarto-style Markdown as its source format and is designed to execute and render
 only the work invalidated by an edit.
 
 The initial implementation provides a safe inspection path that parses a
-document with `panache-parser`, counts slides under the MVP rules, and
-identifies executable cells without running them:
+document with `panache-parser`, lowers it into a recursive source model, counts
+slides under the MVP rules, and identifies executable cells without running
+them:
 
 ```console
 cargo run -- inspect slides.qmd

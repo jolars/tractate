@@ -1,5 +1,9 @@
 //! Backend-independent document types shared by the compiler and its callers.
 
+mod source;
+
+pub(crate) use source::*;
+
 /// A structural summary of a computational Markdown document.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DocumentSummary {

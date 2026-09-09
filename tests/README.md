@@ -43,6 +43,16 @@ verify the inputs needed by semantic lowering: metadata, ordered headings,
 nested Markdown, math, code, option declarations, and source ranges. Inspection
 of every case is also traced for process launches on Linux.
 
+The internal lowering tests in `src/parser/tests.rs` assert the resulting IR
+directly. They cover nested blocks and inlines, list markers and looseness,
+attributes, links, math, raw content, UTF-8 source ranges, and the separation of
+code from options and container prefixes. They also verify that unsupported
+containers retain recognized descendants and that metadata and options remain
+unresolved declarations. YAML rejected by Panache, including duplicate mapping
+keys, retains its original source even when no structured YAML tree is
+available. The existing inspection and process-tracing tests exercise the same
+lowering path.
+
   | Fixture                      | Coverage                                                                                                                                                                                                                                                        |
   | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
   | `source-content.qmd`         | Title, subtitle, author, date, Unicode leading prose, level-one through level-three headings, paragraphs, emphasis, strong text, inline code, a link, nested bullet lists, an ordered list, inline and display math, ordinary R code, and an executable R cell. |

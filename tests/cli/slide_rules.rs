@@ -112,3 +112,11 @@ fn slide_rules_retain_empty_and_consecutive_level_two_headings() {
     assert_slides("First\n-----\n\nSecond\n------\n", 2);
     assert_slides("## First\n\n***\n\n# Context\n\n### Detail\n", 1);
 }
+
+#[test]
+fn slide_rules_count_written_entities_as_leading_source_content() {
+    for source in ["&nbsp;\n", "&#32;\n", "&#x09;\n"] {
+        assert_slides(source, 1);
+        assert_slides(&format!("{source}\n## Content\n"), 2);
+    }
+}
