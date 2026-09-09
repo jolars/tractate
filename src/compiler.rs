@@ -3,8 +3,8 @@
 //! Inspection and subsequent compiler passes consume the source semantic IR.
 
 use crate::document::{
-    Block, BlockKind, DocumentSummary, InlineKind, Presentation, ScalarStyle, Slide, SlideKind,
-    SourceDocument, SourceFile, YamlKind, YamlValue,
+    Block, BlockKind, DocumentSummary, InlineKind, Presentation, ScalarStyle, SemanticIds, Slide,
+    SlideKind, SourceDocument, SourceFile, YamlKind, YamlValue,
 };
 use crate::parser;
 
@@ -52,7 +52,9 @@ pub fn summarize_document(source: &str) -> DocumentSummary {
 
 /// Resolve the MVP slide rules once, before any backend sees the document.
 fn build_presentation(document: SourceDocument) -> Presentation {
+    let ids = SemanticIds::default();
     let title_slide = title(&document).map(|title| Slide {
+        id: ids.slide(),
         origin: title.origin.derived("title-slide"),
         kind: SlideKind::Title(title.clone()),
     });
@@ -74,6 +76,7 @@ fn build_presentation(document: SourceDocument) -> Presentation {
             || (!has_content_slide && has_body_content(&block))
         {
             presentation.slides.push(Slide {
+                id: ids.slide(),
                 origin: block.origin.derived("content-slide"),
                 kind: SlideKind::Content(Vec::new()),
             });

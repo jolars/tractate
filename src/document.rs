@@ -1,11 +1,13 @@
 //! Backend-independent document types shared by the compiler and its callers.
 
 mod diagnostic;
+mod identity;
 mod origin;
 mod presentation;
 mod source;
 
 pub(crate) use diagnostic::*;
+pub(crate) use identity::*;
 pub(crate) use origin::*;
 pub(crate) use presentation::*;
 pub(crate) use source::*;

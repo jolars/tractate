@@ -2,6 +2,7 @@ use super::lower;
 use crate::document::*;
 
 mod diagnostics;
+mod identities;
 mod origins;
 
 fn document(source: &str) -> SourceDocument {

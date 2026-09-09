@@ -525,6 +525,7 @@ struct Presentation {
 }
 
 struct Slide {
+    id: SlideId,
     origin: Origin,
     kind: SlideKind,
 }
@@ -550,9 +551,9 @@ value or first body block. The model owns its data and source snapshots, so it
 remains usable after the source document is dropped.
 
 This source grouping precedes evaluation planning and the presentation IR that
-will place result references. Semantic slide IDs and previous-revision matching
-remain later work; identity should remain stable across ordinary edits whenever
-possible.
+will place result references. Slides carry typed semantic IDs. Label-based
+assignment and previous-revision matching remain later work; identity should
+remain stable across ordinary edits whenever possible.
 
 Do not make backend-specific HTML or Typst structures part of the primary
 document IR.
@@ -1428,6 +1429,21 @@ Do not conflate three different identities:
   | `NodeId`, `SlideId`, or `CellId` | track a semantic entity across revisions          |
   | `ExecutionKey`                   | decide whether a computation result can be reused |
   | `ArtifactId`                     | address immutable output bytes                    |
+
+The internal `document::identity` module defines five opaque newtypes with no
+conversions between identity domains. Blocks and inlines carry `NodeId`, cells
+carry `CellId`, and slides carry `SlideId`. Cloning source nodes and grouping
+them into slides preserves their IDs. Semantic IDs are allocated within a build
+scope, independently of source offsets or content hashes. Fresh full builds
+start new scopes, so their numeric handles must not be compared across builds.
+Label resolution and previous-revision matching will establish reuse across
+revisions.
+
+`ExecutionKey` and `ArtifactId` wrap separate 256-bit digests. Their
+constructors accept already computed digests; execution-input encoding, hash
+algorithms, artifact hashing, and persistent formats belong to the later
+planning and storage stages. Semantic IDs cannot serve as cache keys or artifact
+addresses.
 
 Slides and executable cells should have stable semantic IDs wherever possible.
 

@@ -19,7 +19,10 @@ impl LoweredSource {
 
 pub(crate) fn lower(source: SourceFile) -> LoweredSource {
     let parsed = super::parse(source.text());
-    let lowering = Lowerer { source };
+    let lowering = Lowerer {
+        source,
+        ids: SemanticIds::default(),
+    };
     let mut document = SourceDocument {
         origin: lowering.origin(SourceRange {
             start: 0,
@@ -71,6 +74,7 @@ pub(super) fn range(range: cst::TextRange) -> SourceRange {
 
 pub(super) struct Lowerer {
     source: SourceFile,
+    ids: SemanticIds,
 }
 
 impl Lowerer {
@@ -214,6 +218,7 @@ impl Lowerer {
             }),
         };
         Some(Block {
+            id: self.ids.node(),
             origin: self.origin(source_range),
             attributes,
             kind,
@@ -269,6 +274,7 @@ impl Lowerer {
                 InlineKind::Link(Link {
                     origin: self.origin(source_range),
                     content: vec![Inline {
+                        id: self.ids.node(),
                         origin: self.origin(content_range).derived("autolink label"),
                         attributes: Vec::new(),
                         kind: InlineKind::Text(target),
@@ -373,6 +379,7 @@ impl Lowerer {
             }),
         };
         Some(Inline {
+            id: self.ids.node(),
             origin: self.origin(source_range),
             attributes,
             kind,
@@ -521,6 +528,7 @@ impl Lowerer {
             })
             .collect();
         BlockKind::Cell(Cell {
+            id: self.ids.cell(),
             origin,
             code,
             options,

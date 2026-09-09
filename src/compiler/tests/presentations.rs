@@ -23,6 +23,26 @@ fn title(slide: &Slide) -> &YamlValue {
 }
 
 #[test]
+fn presentations_assign_distinct_slide_identities_and_retain_source_identities() {
+    let doc = document(
+        "---\ntitle: Same\n---\n\nLeading.\n\n## Same\n\n```{r}\n1\n```\n\n## Same\n\n```{r}\n1\n```\n",
+    );
+    let presentation = build_presentation(doc.clone());
+    let ids: std::collections::HashSet<SlideId> =
+        presentation.slides.iter().map(|slide| slide.id).collect();
+
+    assert_eq!(ids.len(), 4);
+    let blocks: Vec<_> = presentation.slides[1..]
+        .iter()
+        .flat_map(content)
+        .cloned()
+        .collect();
+    // Whole-tree equality checks that regrouping retains node and cell IDs.
+    assert_eq!(blocks, doc.blocks);
+    assert_eq!(presentation, presentation.clone());
+}
+
+#[test]
 fn presentations_partition_source_content_without_flattening() {
     let doc = document(include_str!("../../../tests/fixtures/source-content.qmd"));
     let presentation = build_presentation(doc.clone());

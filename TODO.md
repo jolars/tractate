@@ -84,7 +84,7 @@ introduced.
 - [x] Represent diagnostics with a severity, stable code, message, primary
   origin, and related origins.
 - [x] Represent presentations and slides explicitly, independently of HTML.
-- [ ] Keep `NodeId`/`SlideId`/`CellId`, `ExecutionKey`, and `ArtifactId` as
+- [x] Keep `NodeId`/`SlideId`/`CellId`, `ExecutionKey`, and `ArtifactId` as
   distinct types.
 - [ ] Enforce document-scoped unique labels and report unsupported options.
 - [ ] Give labeled nodes deterministic semantic identities; define a best-effort

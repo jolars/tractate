@@ -1,6 +1,6 @@
 //! Source presentations with slide boundaries resolved independently of a backend.
 
-use super::{Block, Metadata, Origin, YamlValue};
+use super::{Block, Metadata, Origin, SlideId, YamlValue};
 
 /// An owned grouping of source content, before result placement or rendering.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -14,6 +14,7 @@ pub(crate) struct Presentation {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Slide {
+    pub id: SlideId,
     /// Title metadata or the first body block initiates this derived node.
     pub origin: Origin,
     pub kind: SlideKind,

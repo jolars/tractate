@@ -5,7 +5,7 @@
     reason = "Inspection uses only part of the source IR; later compiler passes consume the retained content."
 )]
 
-use super::{Origin, SourceFile, SourceSpan};
+use super::{CellId, NodeId, Origin, SourceFile, SourceSpan};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct SourceDocument {
@@ -26,6 +26,7 @@ impl SourceDocument {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Block {
+    pub id: NodeId,
     pub origin: Origin,
     pub attributes: Vec<Attribute>,
     pub kind: BlockKind,
@@ -107,6 +108,7 @@ pub(crate) struct ListItem {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Inline {
+    pub id: NodeId,
     pub origin: Origin,
     pub attributes: Vec<Attribute>,
     pub kind: InlineKind,
@@ -196,6 +198,7 @@ pub(crate) struct Code {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Cell {
+    pub id: CellId,
     pub origin: Origin,
     pub code: Code,
     pub options: Vec<CellOption>,
