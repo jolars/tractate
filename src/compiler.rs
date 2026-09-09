@@ -3,8 +3,8 @@
 //! Inspection and subsequent compiler passes consume the source semantic IR.
 
 use crate::document::{
-    Block, BlockKind, DocumentSummary, InlineKind, ScalarStyle, SourceDocument, SourceFile,
-    YamlKind,
+    Block, BlockKind, DocumentSummary, InlineKind, Presentation, ScalarStyle, Slide, SlideKind,
+    SourceDocument, SourceFile, YamlKind, YamlValue,
 };
 use crate::parser;
 
@@ -37,33 +37,59 @@ pub fn summarize_document(source: &str) -> DocumentSummary {
 
     executable_languages.sort_unstable();
     executable_languages.dedup();
+    let parse_errors = lowered.error_count();
+    let presentation = build_presentation(lowered.document);
 
     DocumentSummary {
-        slides: count_slides(&lowered.document),
+        slides: presentation.slides.len(),
         headings,
         code_blocks,
         executable_cells,
         executable_languages,
-        parse_errors: lowered.error_count(),
+        parse_errors,
     }
 }
 
-fn count_slides(document: &SourceDocument) -> usize {
-    let mut content_slides = 0;
+/// Resolve the MVP slide rules once, before any backend sees the document.
+fn build_presentation(document: SourceDocument) -> Presentation {
+    let title_slide = title(&document).map(|title| Slide {
+        origin: title.origin.derived("title-slide"),
+        kind: SlideKind::Title(title.clone()),
+    });
+    let mut presentation = Presentation {
+        origin: document.origin.derived("presentation"),
+        metadata: document.metadata,
+        preamble: Vec::new(),
+        slides: title_slide.into_iter().collect(),
+    };
 
     // Only document-level blocks define boundaries; nested headings belong to
     // their containing block and must not split a slide.
-    for block in document
-        .blocks
-        .iter()
-        .filter(|block| has_body_content(block))
-    {
-        if matches!(block.kind, BlockKind::Heading { level: 2, .. }) || content_slides == 0 {
-            content_slides += 1;
+    for block in document.blocks {
+        let has_content_slide = presentation
+            .slides
+            .last()
+            .is_some_and(|slide| matches!(slide.kind, SlideKind::Content(_)));
+        if matches!(block.kind, BlockKind::Heading { level: 2, .. })
+            || (!has_content_slide && has_body_content(&block))
+        {
+            presentation.slides.push(Slide {
+                origin: block.origin.derived("content-slide"),
+                kind: SlideKind::Content(Vec::new()),
+            });
+        }
+        if let Some(Slide {
+            kind: SlideKind::Content(blocks),
+            ..
+        }) = presentation.slides.last_mut()
+        {
+            blocks.push(block);
+        } else {
+            presentation.preamble.push(block);
         }
     }
 
-    usize::from(has_title(document)) + content_slides
+    presentation
 }
 
 fn has_body_content(block: &Block) -> bool {
@@ -82,7 +108,7 @@ fn has_body_content(block: &Block) -> bool {
     }
 }
 
-fn has_title(document: &SourceDocument) -> bool {
+fn title(document: &SourceDocument) -> Option<&YamlValue> {
     document
         .metadata
         .first()
@@ -92,8 +118,9 @@ fn has_title(document: &SourceDocument) -> bool {
                 |entry| matches!(&entry.key.kind, YamlKind::Scalar { text, .. } if text == "title"),
             )
         })
-        .is_some_and(|entry| {
-            let YamlKind::Scalar { text: value, style } = &entry.value.kind else {
+        .map(|entry| &entry.value)
+        .filter(|title| {
+            let YamlKind::Scalar { text: value, style } = &title.kind else {
                 return false;
             };
             match style {
@@ -111,6 +138,8 @@ fn has_title(document: &SourceDocument) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    mod presentations;
 
     #[test]
     fn distinguishes_display_code_from_executable_cells() {

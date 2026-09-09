@@ -83,7 +83,7 @@ introduced.
 - [x] Attach source origins to semantic and generated nodes.
 - [x] Represent diagnostics with a severity, stable code, message, primary
   origin, and related origins.
-- [ ] Represent presentations and slides explicitly, independently of HTML.
+- [x] Represent presentations and slides explicitly, independently of HTML.
 - [ ] Keep `NodeId`/`SlideId`/`CellId`, `ExecutionKey`, and `ArtifactId` as
   distinct types.
 - [ ] Enforce document-scoped unique labels and report unsupported options.

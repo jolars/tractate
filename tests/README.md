@@ -83,8 +83,15 @@ The fixture expectations are five slides for `source-content.qmd`, one each for
 for `leading-body.qmd` and `slide-boundaries.qmd`. Inline cases cover missing,
 null, empty, whitespace-only, quoted, and multiline titles; empty documents;
 comments and definitions; leading blocks; and empty or consecutive headings. The
-precise rules are in `DESIGN.md`. Explicit slide construction remains a separate
-roadmap item.
+precise rules are in `DESIGN.md`. Inspection now derives this count from the
+explicit source presentation model.
+
+`src/compiler/tests/presentations.rs` checks the constructed slides directly. It
+verifies exact block placement and preservation of nested content, heading
+attributes, cell declarations, metadata, comments, and definitions. It also
+checks title and content slide origins, Unicode and CRLF source snapshots, empty
+and consecutive headings, and retained source after the original document is
+dropped. These tests exercise the pure compiler without a renderer or runner.
 
 Malformed YAML already fails inspection. Invalid option types, unknown keys, and
 duplicate labels are syntactically valid, so inspection currently succeeds.

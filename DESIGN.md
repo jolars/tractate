@@ -245,10 +245,11 @@ independently. The MVP uses these rules:
   divs stay in their containing slide. Heading-like text inside code is code.
   Horizontal rules are body content and do not start additional slides.
 
-An empty document has no slides. These are source rules: counting slides never
-executes cells or depends on computation results. `tractate inspect` reports the
-count, and `tests/cli/slide_rules.rs` locks down these cases. Explicit slide
-construction belongs to semantic lowering.
+An empty document has no slides. These are source rules: constructing slides
+never executes cells or depends on computation results. `tractate inspect`
+reports the number of constructed slides, and `tests/cli/slide_rules.rs` locks
+down these cases. The pure compiler pass resolves slide boundaries from the
+source semantic IR.
 
 Any additional supported boundary syntax must be defined by fixtures. Vertical
 slide stacks and backend-specific boundary rules are deferred.
@@ -513,21 +514,45 @@ building its structured tree, including duplicate mapping keys, the IR retains
 the rejected source as unsupported syntax and inspection reports the parser
 errors. Option resolution and semantic diagnostics remain subsequent work.
 
-Presentations should additionally expose slides explicitly:
+The internal source presentation model exposes slides explicitly:
 
 ```rust
 struct Presentation {
-    metadata: Metadata,
+    origin: Origin,
+    metadata: Vec<Metadata>,
+    preamble: Vec<Block>,
     slides: Vec<Slide>,
 }
 
 struct Slide {
-    id: SlideId,
-    blocks: Vec<BlockId>,
+    origin: Origin,
+    kind: SlideKind,
+}
+
+enum SlideKind {
+    Title(YamlValue),
+    Content(Vec<Block>),
 }
 ```
 
-Slide identity should remain stable across ordinary edits whenever possible.
+The pure compiler pass consumes a source document and moves its blocks into
+content slides without changing their nesting, attributes, declarations, or
+origins. Each level-two boundary heading is the first block of its slide.
+Leading comments and definitions remain in the presentation's preamble without
+creating a slide. Once a content slide exists, subsequent comments and
+definitions remain in source order within that slide. Definitions retain their
+document scope regardless of their placement.
+
+A title slide retains the qualifying YAML value, including its scalar style and
+origin. Metadata interpretation remains a later pass. The presentation's origin
+derives from the source document; each slide's origin derives from its title
+value or first body block. The model owns its data and source snapshots, so it
+remains usable after the source document is dropped.
+
+This source grouping precedes evaluation planning and the presentation IR that
+will place result references. Semantic slide IDs and previous-revision matching
+remain later work; identity should remain stable across ordinary edits whenever
+possible.
 
 Do not make backend-specific HTML or Typst structures part of the primary
 document IR.

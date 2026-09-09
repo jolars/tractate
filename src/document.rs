@@ -2,10 +2,12 @@
 
 mod diagnostic;
 mod origin;
+mod presentation;
 mod source;
 
 pub(crate) use diagnostic::*;
 pub(crate) use origin::*;
+pub(crate) use presentation::*;
 pub(crate) use source::*;
 
 /// A structural summary of a computational Markdown document.
