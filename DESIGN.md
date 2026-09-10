@@ -422,9 +422,11 @@ covers inheritance and overrides, and `option-type-boundaries.qmd` adds YAML
 Boolean spellings, exponent dimensions, flow inputs, empty inputs and captions,
 and literal and folded captions. `invalid-option-types.qmd` and
 `invalid-option-values.qmd` preserve wrong types, nulls, invalid enums, empty
-names, mixed input lists, and invalid dimensions. Syntax inspection continues to
-accept syntactically valid declarations; type validation and diagnostics belong
-to semantic lowering.
+names, mixed input lists, and invalid dimensions. The library's syntax-only
+`summarize_document` continues to accept syntactically valid declarations.
+`inspect_document` and the CLI additionally validate label values and
+uniqueness, option names and scopes, and unsupported option syntax. Other option
+value types and effective default resolution remain subsequent compiler work.
 
 The incremental compiler and fake-runner stages must turn the following edit
 cases into behavioral tests, each compared with a clean full build:
@@ -512,7 +514,17 @@ shape and scalar style, and source ranges are retained without resolving
 defaults or applying the option contract. When Panache rejects YAML before
 building its structured tree, including duplicate mapping keys, the IR retains
 the rejected source as unsupported syntax and inspection reports the parser
-errors. Option resolution and semantic diagnostics remain subsequent work.
+errors. A pure compiler validation pass consumes these declarations before
+option resolution. It checks the supported vocabulary and scopes, mapping
+shapes, inline options and labels, YAML tags, anchors, aliases, and merge keys.
+Ordinary code bodies and unrelated document metadata do not supply options.
+
+Explicit Markdown identifier attributes and cell `label` values share one
+case-sensitive document namespace. Duplicate labels report the later declaration
+and relate it to the first declaration in QMD order, including labels in nested
+content, other slides or sessions, and disabled or hidden cells. Quoting and
+escapes do not distinguish otherwise identical labels. Semantic identity
+assignment and effective option resolution remain subsequent work.
 
 The internal source presentation model exposes slides explicitly:
 
@@ -1234,8 +1246,19 @@ the category independently of Panache's message wording. Panache's messages and
 QMD byte ranges are retained directly, including container prefixes and line
 endings. The current parser supplies no related locations, so those diagnostics
 have an empty related-origin list. Inspection derives its existing parse-error
-count from error-severity diagnostics. Diagnostic presentation and semantic
-option validation remain later work.
+count from error-severity syntax diagnostics. `inspect_document` returns the
+summary and retained diagnostics, and runs declaration validation only after
+parsing succeeds. The CLI prints source locations, codes, messages, and related
+origins, counts semantic errors separately, and fails on either error category.
+Columns count Unicode scalar values starting at one; stored ranges remain UTF-8
+byte offsets.
+
+Declaration validation uses `option.unknown`, `option.wrong-scope`,
+`option.duplicate`, `option.invalid-mapping`, `option.unsupported-syntax`,
+`option.invalid-label`, and `semantic.duplicate-label`. Panache currently
+rejects duplicate YAML mapping keys before producing a structured mapping; those
+remain `syntax.invalid-yaml` errors and do not generate cascading semantic
+diagnostics.
 
 Runner failures whose internal stack frames cannot be mapped to QMD should still
 point to the executable cell that initiated them. Generated backend diagnostics

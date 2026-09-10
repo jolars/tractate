@@ -93,13 +93,22 @@ checks title and content slide origins, Unicode and CRLF source snapshots, empty
 and consecutive headings, and retained source after the original document is
 dropped. These tests exercise the pure compiler without a renderer or runner.
 
-Malformed YAML already fails inspection. Invalid option types, unknown keys, and
-duplicate labels are syntactically valid, so inspection currently succeeds.
-Their fixtures retain the declarations that semantic lowering must diagnose.
-Likewise, the defaults fixture preserves both scopes without resolving them in
-the test: the first cell should inherit document defaults, and local options in
-the second should override the corresponding defaults. Type validation, option
-resolution, and diagnostics belong to semantic lowering. The supported types,
+Malformed YAML fails inspection with syntax diagnostics. Unknown keys, invalid
+label values, and duplicate labels now fail inspection with semantic
+diagnostics; `summarize_document` still reports their syntax-only structural
+counts. The compiler validation tests check document-wide labels across Markdown
+attributes, nested content, slides, sessions, and disabled cells. They cover
+option names and scopes, duplicate keys, mapping shapes, unsupported inline
+options and YAML features, label quoting and block scalars, and precise
+Unicode/CRLF origins. `cli/validation.rs` checks locations, related
+declarations, failure status, and absence of process launches. The public
+library test verifies that diagnostics retain the source snapshot after edits
+and dropping the original string.
+
+The defaults fixture preserves both scopes without resolving them: the first
+cell should inherit document defaults, and local options in the second should
+override the corresponding defaults. Other option value types and effective
+option resolution remain subsequent compiler work. The supported types,
 defaults, scopes, invalidation classes, and behavioral acceptance cases are now
 specified in the cell option contract in `DESIGN.md`. Execution and incremental
 invalidation remain later roadmap items.
@@ -109,10 +118,11 @@ sequence nodes without coercing values or applying its R Markdown compatibility
 resolver. They also check that option ranges slice the original QMD correctly,
 including Unicode and prefixed multiline captions. Block scalar values retain
 their header in panache-parser 0.29, so these tests check preservation rather
-than pretending to decode captions. No fixture test currently proves type
-rejection, effective default resolution, or execution invalidation. A local
-`panache-ignore-format` directive preserves the deliberate Boolean spellings,
-quote styles, and physical caption lines in `option-type-boundaries.qmd`.
+than pretending to decode captions. Only label type rejection is currently
+implemented; effective default resolution, other option value validation, and
+execution invalidation remain later work. A local `panache-ignore-format`
+directive preserves the deliberate Boolean spellings, quote styles, and physical
+caption lines in `option-type-boundaries.qmd`.
 
 The internal origin tests in `src/parser/tests/origins.rs` walk every semantic
 node in all QMD fixtures with LF and CRLF line endings, including rejected

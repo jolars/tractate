@@ -5,5 +5,8 @@ mod document;
 mod parser;
 mod render;
 
-pub use compiler::summarize_document;
-pub use document::DocumentSummary;
+pub use compiler::{inspect_document, summarize_document};
+pub use document::{
+    Derivation, Diagnostic, DiagnosticCode, DocumentInspection, DocumentSummary, Origin,
+    RelatedOrigin, Severity, SourceFile, SourceRange, SourceSpan,
+};

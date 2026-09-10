@@ -34,7 +34,7 @@ fn origins_trace_generated_ranges_through_semantic_nodes_to_qmd() {
     let diagnostic = generated.derived("backend diagnostic");
 
     assert_eq!(diagnostic.source_span(), title.origin.source_span());
-    assert_eq!(diagnostic.source_span().text(), " Café\n");
+    assert_eq!(diagnostic.source_span().text(), "Café");
     assert_eq!(
         diagnostic.source_span().file().path(),
         Some(Path::new("slides.qmd"))

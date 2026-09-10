@@ -4,7 +4,7 @@ use super::Origin;
 
 /// Severity is independent of the diagnostic's code and producer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Severity {
+pub enum Severity {
     Error,
     #[allow(dead_code, reason = "Subsequent compiler passes can emit warnings.")]
     Warning,
@@ -14,8 +14,15 @@ pub(crate) enum Severity {
 
 /// Tractate-owned categories; codes must not depend on upstream message wording.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum DiagnosticCode {
+pub enum DiagnosticCode {
     InvalidYaml,
+    UnknownOption,
+    WrongOptionScope,
+    DuplicateOption,
+    InvalidOptionMapping,
+    UnsupportedOptionSyntax,
+    InvalidLabel,
+    DuplicateLabel,
 }
 
 impl DiagnosticCode {
@@ -24,13 +31,20 @@ impl DiagnosticCode {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::InvalidYaml => "syntax.invalid-yaml",
+            Self::UnknownOption => "option.unknown",
+            Self::WrongOptionScope => "option.wrong-scope",
+            Self::DuplicateOption => "option.duplicate",
+            Self::InvalidOptionMapping => "option.invalid-mapping",
+            Self::UnsupportedOptionSyntax => "option.unsupported-syntax",
+            Self::InvalidLabel => "option.invalid-label",
+            Self::DuplicateLabel => "semantic.duplicate-label",
         }
     }
 }
 
 /// A diagnostic owns its message and retains the snapshots behind every origin.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Diagnostic {
+pub struct Diagnostic {
     pub severity: Severity,
     pub code: DiagnosticCode,
     pub message: String,
@@ -41,7 +55,7 @@ pub(crate) struct Diagnostic {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct RelatedOrigin {
+pub struct RelatedOrigin {
     pub message: String,
     pub origin: Origin,
 }

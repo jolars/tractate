@@ -73,7 +73,15 @@ fn source_fixtures_cover_inspection_without_execution() {
         #[cfg(not(target_os = "linux"))]
         let output = project.inspect();
 
-        assert_eq!(output.status.success(), errors == 0, "{name}: {output:?}");
+        assert_eq!(
+            output.status.success(),
+            errors == 0
+                && !matches!(
+                    name,
+                    "unknown-options.qmd" | "duplicate-labels.qmd" | "invalid-option-values.qmd"
+                ),
+            "{name}: {output:?}"
+        );
         assert!(
             output.stdout.contains(&format!("parse errors: {errors}\n")),
             "{name}: {output:?}"

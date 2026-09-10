@@ -18,8 +18,13 @@ pub(crate) struct SourceDocument {
 impl SourceDocument {
     /// Visit semantic blocks in source order, including preserved containers.
     pub fn visit_blocks(&self, visitor: &mut impl FnMut(&Block)) {
+        self.visit_nodes(visitor, &mut |_| {});
+    }
+
+    /// Visit blocks and inlines without flattening preserved syntax.
+    pub fn visit_nodes(&self, blocks: &mut impl FnMut(&Block), inlines: &mut impl FnMut(&Inline)) {
         for block in &self.blocks {
-            block.visit(visitor);
+            block.visit(blocks, inlines);
         }
     }
 }
@@ -53,31 +58,31 @@ pub(crate) enum BlockKind {
 }
 
 impl Block {
-    fn visit(&self, visitor: &mut impl FnMut(&Block)) {
+    fn visit(&self, visitor: &mut impl FnMut(&Block), inlines: &mut impl FnMut(&Inline)) {
         visitor(self);
         match &self.kind {
             BlockKind::Heading { content, .. }
             | BlockKind::Paragraph(content)
             | BlockKind::Plain(content) => {
                 for inline in content {
-                    inline.visit_blocks(visitor);
+                    inline.visit_blocks(visitor, inlines);
                 }
             }
             BlockKind::List(list) => {
                 for item in &list.items {
                     for block in &item.blocks {
-                        block.visit(visitor);
+                        block.visit(visitor, inlines);
                     }
                 }
             }
             BlockKind::Quote(blocks) | BlockKind::Div(blocks) => {
                 for block in blocks {
-                    block.visit(visitor);
+                    block.visit(visitor, inlines);
                 }
             }
             BlockKind::ReferenceDefinition(node)
             | BlockKind::FootnoteDefinition(node)
-            | BlockKind::Unsupported(node) => node.visit_blocks(visitor),
+            | BlockKind::Unsupported(node) => node.visit_blocks(visitor, inlines),
             _ => {}
         }
     }
@@ -136,21 +141,22 @@ pub(crate) enum InlineKind {
 }
 
 impl Inline {
-    fn visit_blocks(&self, visitor: &mut impl FnMut(&Block)) {
+    fn visit_blocks(&self, visitor: &mut impl FnMut(&Block), inlines: &mut impl FnMut(&Inline)) {
+        inlines(self);
         match &self.kind {
             InlineKind::Emphasis(content)
             | InlineKind::Strong(content)
             | InlineKind::Span(content) => {
                 for inline in content {
-                    inline.visit_blocks(visitor);
+                    inline.visit_blocks(visitor, inlines);
                 }
             }
             InlineKind::Link(link) | InlineKind::Image(link) => {
                 for inline in &link.content {
-                    inline.visit_blocks(visitor);
+                    inline.visit_blocks(visitor, inlines);
                 }
             }
-            InlineKind::Unsupported(node) => node.visit_blocks(visitor),
+            InlineKind::Unsupported(node) => node.visit_blocks(visitor, inlines),
             _ => {}
         }
     }
@@ -294,12 +300,12 @@ pub(crate) enum PreservedChild {
 }
 
 impl PreservedSyntax {
-    fn visit_blocks(&self, visitor: &mut impl FnMut(&Block)) {
+    fn visit_blocks(&self, visitor: &mut impl FnMut(&Block), inlines: &mut impl FnMut(&Inline)) {
         for child in &self.children {
             match child {
-                PreservedChild::Block(block) => block.visit(visitor),
-                PreservedChild::Inline(inline) => inline.visit_blocks(visitor),
-                PreservedChild::Syntax(node) => node.visit_blocks(visitor),
+                PreservedChild::Block(block) => block.visit(visitor, inlines),
+                PreservedChild::Inline(inline) => inline.visit_blocks(visitor, inlines),
+                PreservedChild::Syntax(node) => node.visit_blocks(visitor, inlines),
             }
         }
     }

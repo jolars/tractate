@@ -6,9 +6,9 @@ mod origin;
 mod presentation;
 mod source;
 
-pub(crate) use diagnostic::*;
+pub use diagnostic::*;
 pub(crate) use identity::*;
-pub(crate) use origin::*;
+pub use origin::*;
 pub(crate) use presentation::*;
 pub(crate) use source::*;
 
@@ -27,4 +27,30 @@ pub struct DocumentSummary {
     pub executable_languages: Vec<String>,
     /// Number of syntax errors reported by the parser.
     pub parse_errors: usize,
+}
+
+/// Structural information and diagnostics from execution-free inspection.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DocumentInspection {
+    pub summary: DocumentSummary,
+    pub diagnostics: Vec<Diagnostic>,
+}
+
+impl DocumentInspection {
+    /// Return whether inspection found any error-severity diagnostics.
+    #[must_use]
+    pub fn has_errors(&self) -> bool {
+        self.diagnostics
+            .iter()
+            .any(|d| d.severity == Severity::Error)
+    }
+
+    /// Count semantic errors independently of syntax errors in the summary.
+    #[must_use]
+    pub fn semantic_errors(&self) -> usize {
+        self.diagnostics
+            .iter()
+            .filter(|d| d.severity == Severity::Error && d.code != DiagnosticCode::InvalidYaml)
+            .count()
+    }
 }

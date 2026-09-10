@@ -86,7 +86,7 @@ introduced.
 - [x] Represent presentations and slides explicitly, independently of HTML.
 - [x] Keep `NodeId`/`SlideId`/`CellId`, `ExecutionKey`, and `ArtifactId` as
   distinct types.
-- [ ] Enforce document-scoped unique labels and report unsupported options.
+- [x] Enforce document-scoped unique labels and report unsupported options.
 - [ ] Give labeled nodes deterministic semantic identities; define a best-effort
   previous-revision matcher for unlabeled slides and cells.
 

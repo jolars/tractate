@@ -1,6 +1,7 @@
 mod common;
 mod slide_rules;
 mod source_fixtures;
+mod validation;
 
 use common::{Edit, TestProject, assert_matches_full_build, fixture};
 
@@ -28,9 +29,15 @@ fn inspect_rejects_malformed_input() {
         assert_eq!(output.status.code(), Some(1), "{name}: {output:?}");
         assert!(output.stdout.contains("executable cells: 1"), "{output:?}");
         assert!(output.stdout.contains("parse errors: 1"), "{output:?}");
-        assert_eq!(
-            output.stderr, "tractate: parser reported 1 error(s) in `slides.qmd`\n",
-            "{name}"
+        assert!(
+            output.stderr.contains("error[syntax.invalid-yaml]"),
+            "{name}: {output:?}"
+        );
+        assert!(
+            output
+                .stderr
+                .ends_with("tractate: parser reported 1 error(s) in `slides.qmd`\n"),
+            "{name}: {output:?}"
         );
     }
 }

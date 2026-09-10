@@ -494,7 +494,7 @@ impl Lowerer {
         let preamble = node
             .hashpipe_yaml_preamble()
             .map(|preamble| self.yaml(preamble.syntax()));
-        let options = cell
+        let mut options: Vec<_> = cell
             .option_declarations()
             .into_iter()
             .map(|option| {
@@ -527,6 +527,21 @@ impl Lowerer {
                 }
             })
             .collect();
+        for label in cell.labels() {
+            if label.source() == cst::ChunkLabelSource::InlineLabel {
+                options.push(CellOption {
+                    origin: self.origin(range(label.declaration_range())),
+                    source: OptionSource::Inline,
+                    key: Some("label".into()),
+                    key_span: None,
+                    value_span: Some(self.span(range(label.value_range()))),
+                    value: None,
+                    inline_value: Some(label.value().into()),
+                    inline_quoted: false,
+                });
+            }
+        }
+        options.sort_by_key(|option| option.origin.source_span().range().start);
         BlockKind::Cell(Cell {
             id: self.ids.cell(),
             origin,

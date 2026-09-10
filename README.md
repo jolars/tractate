@@ -6,18 +6,25 @@ only the work invalidated by an edit.
 
 The initial implementation provides a safe inspection path that parses a
 document with `panache-parser`, lowers it into a recursive source model, counts
-slides under the MVP rules, and identifies executable cells without running
-them:
+slides under the MVP rules, identifies executable cells, and checks labels and
+option declarations without running code:
 
 ```console
 cargo run -- inspect slides.qmd
 ```
 
 The compiler lives in a single crate with private `document`, `parser`,
-`compiler`, and `render` modules. The library facade exposes `DocumentSummary`
-and `summarize_document`. The `render` module reserves the boundary for future
-presentation backends; the planned execution and rendering behavior is described
-in [DESIGN.md](DESIGN.md).
+`compiler`, and `render` modules. The library offers `summarize_document` for a
+syntax-only structural summary and `inspect_document` for a summary with
+structured diagnostics. Diagnostics retain their source snapshots, UTF-8 byte
+ranges, stable codes, and related declarations. The CLI prints their QMD line
+and column locations and exits unsuccessfully on syntax or semantic errors.
+Inspection checks document-wide label uniqueness, label values, option names and
+scopes, and unsupported option syntax. Other option value types and default
+resolution remain subsequent compiler work.
+
+The `render` module reserves the boundary for future presentation backends; the
+planned execution and rendering behavior is described in [DESIGN.md](DESIGN.md).
 
 ## Development
 

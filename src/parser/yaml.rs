@@ -8,6 +8,7 @@ use crate::document::*;
 impl Lowerer {
     pub(super) fn yaml(&self, node: &cst::SyntaxNode) -> YamlValue {
         let source_range = range(node.text_range());
+        let mut origin = self.origin(source_range);
         let mut properties: Vec<_> = node
             .children_with_tokens()
             .filter(|element| {
@@ -115,6 +116,7 @@ impl Lowerer {
                 });
                 if let Some(content) = content {
                     let value = self.yaml(&content);
+                    origin = value.origin;
                     properties.extend(value.properties);
                     value.kind
                 } else if node.children_with_tokens().all(|element| {
@@ -135,7 +137,7 @@ impl Lowerer {
             }
         };
         YamlValue {
-            origin: self.origin(source_range),
+            origin,
             properties,
             kind,
         }

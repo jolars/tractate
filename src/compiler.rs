@@ -3,10 +3,12 @@
 //! Inspection and subsequent compiler passes consume the source semantic IR.
 
 use crate::document::{
-    Block, BlockKind, DocumentSummary, InlineKind, Presentation, ScalarStyle, SemanticIds, Slide,
-    SlideKind, SourceDocument, SourceFile, YamlKind, YamlValue,
+    Block, BlockKind, DocumentInspection, DocumentSummary, InlineKind, Presentation, ScalarStyle,
+    SemanticIds, Slide, SlideKind, SourceDocument, SourceFile, YamlKind, YamlValue,
 };
 use crate::parser;
+
+mod validation;
 
 /// Parse Quarto-flavored Markdown and report its computational structure.
 ///
@@ -14,7 +16,28 @@ use crate::parser;
 /// code cells.
 #[must_use]
 pub fn summarize_document(source: &str) -> DocumentSummary {
+    summarize_lowered(parser::lower(SourceFile::anonymous(source)))
+}
+
+/// Inspect syntax, option declarations, and document-scoped labels without executing code.
+///
+/// Semantic validation runs only after successful parsing, so rejected syntax
+/// cannot be interpreted as a partial option mapping. Diagnostic origins retain
+/// the supplied source snapshot; ranges use UTF-8 byte offsets.
+#[must_use]
+pub fn inspect_document(source: &str) -> DocumentInspection {
     let lowered = parser::lower(SourceFile::anonymous(source));
+    let mut diagnostics = lowered.diagnostics.clone();
+    if lowered.error_count() == 0 {
+        diagnostics.extend(validation::validate(&lowered.document));
+    }
+    DocumentInspection {
+        summary: summarize_lowered(lowered),
+        diagnostics,
+    }
+}
+
+fn summarize_lowered(lowered: parser::LoweredSource) -> DocumentSummary {
     let mut headings = 0;
     let mut code_blocks = 0;
     let mut executable_cells = 0;
@@ -143,6 +166,7 @@ mod tests {
     use super::*;
 
     mod presentations;
+    mod validation;
 
     #[test]
     fn distinguishes_display_code_from_executable_cells() {

@@ -5,7 +5,7 @@ use panache_parser::{Flavor, ParsedDocument, ParserOptions, parse_document};
 mod lowering;
 mod yaml;
 
-pub(crate) use lowering::lower;
+pub(crate) use lowering::{LoweredSource, lower};
 
 #[cfg(test)]
 mod tests;
