@@ -1,6 +1,10 @@
 flavor = "gfm"
-# Invalid syntax is intentional in parser regression fixtures.
-exclude = ["tests/fixtures/malformed-*.qmd"]
+exclude = [
+  # Versionary owns the changelog's formatting.
+  "CHANGELOG.md",
+  # Invalid syntax is intentional in parser regression fixtures.
+  "tests/fixtures/malformed-*.qmd",
+]
 
 [flavor-overrides]
 "AGENTS.md" = "gfm"
