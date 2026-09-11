@@ -60,9 +60,9 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
 name = "bitflags"
-version = "2.13.1"
+version = "2.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b588b76d00fde79687d7646a9b5bdf3cc0f655e0bbd080335a95d7e96f3587da"
+checksum = "3ded4057c258ba199e2d26386d3af3780957ecaee6c4ef4041c6b4b8b97c0b06"
 
 [[package]]
 name = "cfg-if"
@@ -226,9 +226,9 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
 name = "panache-parser"
-version = "0.29.0"
+version = "0.29.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "86c3821235627a5f68a84d18b4e89950c4a569839101d6411d3b0234505e3cde"
+checksum = "f434c429a88ff79c789bbd9edfe848986b9df023bf9e9e54e064a7eff24cfca2"
 dependencies = [
  "entities",
  "log",
@@ -430,7 +430,7 @@ checksum = "f18aa187839b2bdb1ad2fa35ead8c4c2976b64e4363c386d45ac0f7ee85c9233"
 
 [[package]]
 name = "tractate"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "clap",
  "panache-parser",
