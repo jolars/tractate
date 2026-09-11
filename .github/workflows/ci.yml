@@ -52,7 +52,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@1.89.0
+      - name: Install Rust
+        run: |
+          rustup toolchain install 1.89.0 --profile minimal
+          rustup override set 1.89.0
       - uses: Swatinem/rust-cache@v2
         with:
           key: msrv

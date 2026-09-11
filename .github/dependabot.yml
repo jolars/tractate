@@ -4,9 +4,6 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
-    # The MSRV is a compatibility guarantee and must not advance automatically.
-    ignore:
-      - dependency-name: "dtolnay/rust-toolchain"
     groups:
       github-actions:
         patterns:
