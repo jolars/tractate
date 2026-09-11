@@ -526,31 +526,34 @@ content, other slides or sessions, and disabled or hidden cells. Quoting and
 escapes do not distinguish otherwise identical labels. Semantic identity
 assignment and effective option resolution remain subsequent work.
 
-The internal source presentation model exposes slides explicitly:
+The internal presentation model exposes slides explicitly and shares Markdown
+structure between source cells and presentation cells:
 
 ```rust
-struct Presentation {
+struct Presentation<C = PresentedCell> {
     origin: Origin,
     metadata: Vec<Metadata>,
-    preamble: Vec<Block>,
-    slides: Vec<Slide>,
+    preamble: Vec<Block<C>>,
+    slides: Vec<Slide<C>>,
 }
 
-struct Slide {
+struct Slide<C = PresentedCell> {
     id: SlideId,
     origin: Origin,
-    kind: SlideKind,
+    kind: SlideKind<C>,
 }
 
-enum SlideKind {
+enum SlideKind<C = PresentedCell> {
     Title(YamlValue),
-    Content(Vec<Block>),
+    Content(Vec<Block<C>>),
 }
+
+type SourcePresentation = Presentation<Cell>;
 ```
 
-The pure compiler pass consumes a source document and moves its blocks into
-content slides without changing their nesting, attributes, declarations, or
-origins. Each level-two boundary heading is the first block of its slide.
+The pure grouping pass consumes a source document and moves its blocks into a
+`SourcePresentation` without changing their nesting, attributes, declarations,
+or origins. Each level-two boundary heading is the first block of its slide.
 Leading comments and definitions remain in the presentation's preamble without
 creating a slide. Once a content slide exists, subsequent comments and
 definitions remain in source order within that slide. Definitions retain their
@@ -562,10 +565,50 @@ derives from the source document; each slide's origin derives from its title
 value or first body block. The model owns its data and source snapshots, so it
 remains usable after the source document is dropped.
 
-This source grouping precedes evaluation planning and the presentation IR that
-will place result references. Slides carry typed semantic IDs. Label-based
-assignment and previous-revision matching remain later work; identity should
-remain stable across ordinary edits whenever possible.
+The next pure pass, `compiler::presentation::lower_presentation`, produces
+`Presentation<PresentedCell>`, the backend-independent presentation IR. It
+replaces every executable-cell leaf with source display data and a result slot:
+
+```rust
+struct PresentedCell {
+    id: CellId,
+    origin: Origin,
+    source: Code,
+    options: Vec<CellOption>,
+    preamble: Option<YamlValue>,
+    result: ResultSlot,
+}
+
+struct ResultSlot {
+    cell: CellId,
+    origin: Origin,
+}
+```
+
+A slot marks where the cell's ordered output can appear after its displayed
+source. It holds no runner output, artifact bytes, backend markup, execution
+key, or execution state. Future planning and result lookup must validate the
+desired computation before supplying output for a `CellId`; an identity match
+alone cannot establish reuse. Results remain external, so their arrival does not
+mutate the source tree.
+
+Every executable cell has one potential slot, including cells nested in lists,
+quotes, divs, and preserved syntax such as footnotes. Ordinary code has none.
+Source-only presentations can be constructed with no execution infrastructure or
+result store. Cells retain their option declarations, and presentations retain
+document defaults, for subsequent pure option resolution. A slot does not
+authorize execution or assert that a result is required. In particular,
+`eval: false` requires no result, and `include: false` suppresses presentation;
+these rules will be applied before rendering or scheduling. Slots also do not
+resolve captions or imply that a figure exists.
+
+The two layers share generic Markdown containers, with source `Cell` leaves or
+`PresentedCell` leaves as distinct types. The mapping preserves block, inline,
+slide, and cell IDs; source order; nesting; attributes; declarations; and source
+snapshots. Presentation, slide, cell-presentation, and result-slot origins add
+derivation steps without replacing source origins. Inspection traverses this
+presentation IR without executing code. Label-based identity assignment and
+previous-revision matching remain later work.
 
 Do not make backend-specific HTML or Typst structures part of the primary
 document IR.

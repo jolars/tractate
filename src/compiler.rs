@@ -3,11 +3,12 @@
 //! Inspection and subsequent compiler passes consume the source semantic IR.
 
 use crate::document::{
-    Block, BlockKind, DocumentInspection, DocumentSummary, InlineKind, Presentation, ScalarStyle,
-    SemanticIds, Slide, SlideKind, SourceDocument, SourceFile, YamlKind, YamlValue,
+    Block, BlockKind, DocumentInspection, DocumentSummary, InlineKind, ScalarStyle, SemanticIds,
+    Slide, SlideKind, SourceDocument, SourceFile, SourcePresentation, YamlKind, YamlValue,
 };
 use crate::parser;
 
+mod presentation;
 mod validation;
 
 /// Parse Quarto-flavored Markdown and report its computational structure.
@@ -38,30 +39,28 @@ pub fn inspect_document(source: &str) -> DocumentInspection {
 }
 
 fn summarize_lowered(lowered: parser::LoweredSource) -> DocumentSummary {
+    let parse_errors = lowered.error_count();
+    let presentation = presentation::lower_presentation(build_presentation(lowered.document));
     let mut headings = 0;
     let mut code_blocks = 0;
     let mut executable_cells = 0;
     let mut executable_languages = Vec::new();
 
-    lowered
-        .document
-        .visit_blocks(&mut |block| match &block.kind {
-            BlockKind::Heading { .. } => headings += 1,
-            BlockKind::Code(_) => code_blocks += 1,
-            BlockKind::Cell(cell) => {
-                code_blocks += 1;
-                executable_cells += 1;
-                if let Some(language) = &cell.code.language {
-                    executable_languages.push(language.clone());
-                }
+    presentation.visit_blocks(&mut |block| match &block.kind {
+        BlockKind::Heading { .. } => headings += 1,
+        BlockKind::Code(_) => code_blocks += 1,
+        BlockKind::Cell(cell) => {
+            code_blocks += 1;
+            executable_cells += 1;
+            if let Some(language) = &cell.source.language {
+                executable_languages.push(language.clone());
             }
-            _ => {}
-        });
+        }
+        _ => {}
+    });
 
     executable_languages.sort_unstable();
     executable_languages.dedup();
-    let parse_errors = lowered.error_count();
-    let presentation = build_presentation(lowered.document);
 
     DocumentSummary {
         slides: presentation.slides.len(),
@@ -74,14 +73,14 @@ fn summarize_lowered(lowered: parser::LoweredSource) -> DocumentSummary {
 }
 
 /// Resolve the MVP slide rules once, before any backend sees the document.
-fn build_presentation(document: SourceDocument) -> Presentation {
+fn build_presentation(document: SourceDocument) -> SourcePresentation {
     let ids = SemanticIds::default();
     let title_slide = title(&document).map(|title| Slide {
         id: ids.slide(),
         origin: title.origin.derived("title-slide"),
         kind: SlideKind::Title(title.clone()),
     });
-    let mut presentation = Presentation {
+    let mut presentation = SourcePresentation {
         origin: document.origin.derived("presentation"),
         metadata: document.metadata,
         preamble: Vec::new(),
@@ -165,6 +164,7 @@ fn title(document: &SourceDocument) -> Option<&YamlValue> {
 mod tests {
     use super::*;
 
+    mod presentation_ir;
     mod presentations;
     mod validation;
 

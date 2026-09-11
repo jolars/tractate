@@ -8,14 +8,14 @@ fn document(source: &str) -> SourceDocument {
     lowered.document
 }
 
-fn content(slide: &Slide) -> &[Block] {
+fn content(slide: &Slide<Cell>) -> &[Block] {
     let SlideKind::Content(blocks) = &slide.kind else {
         panic!("expected a content slide");
     };
     blocks
 }
 
-fn title(slide: &Slide) -> &YamlValue {
+fn title(slide: &Slide<Cell>) -> &YamlValue {
     let SlideKind::Title(title) = &slide.kind else {
         panic!("expected a title slide");
     };

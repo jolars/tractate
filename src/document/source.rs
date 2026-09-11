@@ -7,6 +7,8 @@
 
 use super::{CellId, NodeId, Origin, SourceFile, SourceSpan};
 
+mod mapping;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct SourceDocument {
     pub source: SourceFile,
@@ -29,36 +31,41 @@ impl SourceDocument {
     }
 }
 
+/// Sharing structure across layers prevents result placement from flattening
+/// Markdown containers or maintaining a second, divergent Markdown vocabulary.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Block {
+pub(crate) struct Block<C = Cell> {
     pub id: NodeId,
     pub origin: Origin,
     pub attributes: Vec<Attribute>,
-    pub kind: BlockKind,
+    pub kind: BlockKind<C>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum BlockKind {
-    Heading { level: usize, content: Vec<Inline> },
-    Paragraph(Vec<Inline>),
-    Plain(Vec<Inline>),
-    List(List),
-    Quote(Vec<Block>),
-    Div(Vec<Block>),
+pub(crate) enum BlockKind<C = Cell> {
+    Heading {
+        level: usize,
+        content: Vec<Inline<C>>,
+    },
+    Paragraph(Vec<Inline<C>>),
+    Plain(Vec<Inline<C>>),
+    List(List<C>),
+    Quote(Vec<Block<C>>),
+    Div(Vec<Block<C>>),
     Code(Code),
-    Cell(Cell),
+    Cell(C),
     Math(String),
     ThematicBreak,
     Raw(RawContent),
     Comment,
-    ReferenceDefinition(PreservedSyntax),
-    FootnoteDefinition(PreservedSyntax),
+    ReferenceDefinition(PreservedSyntax<C>),
+    FootnoteDefinition(PreservedSyntax<C>),
     Metadata(Metadata),
-    Unsupported(PreservedSyntax),
+    Unsupported(PreservedSyntax<C>),
 }
 
-impl Block {
-    fn visit(&self, visitor: &mut impl FnMut(&Block), inlines: &mut impl FnMut(&Inline)) {
+impl<C> Block<C> {
+    pub fn visit(&self, visitor: &mut impl FnMut(&Block<C>), inlines: &mut impl FnMut(&Inline<C>)) {
         visitor(self);
         match &self.kind {
             BlockKind::Heading { content, .. }
@@ -89,11 +96,11 @@ impl Block {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct List {
+pub(crate) struct List<C = Cell> {
     pub origin: Origin,
     pub kind: ListKind,
     pub loose: bool,
-    pub items: Vec<ListItem>,
+    pub items: Vec<ListItem<C>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -103,45 +110,49 @@ pub(crate) enum ListKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct ListItem {
+pub(crate) struct ListItem<C = Cell> {
     pub origin: Origin,
     /// Keeping each original marker also preserves nondecimal ordered lists.
     pub marker: Option<String>,
     pub checked: Option<bool>,
-    pub blocks: Vec<Block>,
+    pub blocks: Vec<Block<C>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Inline {
+pub(crate) struct Inline<C = Cell> {
     pub id: NodeId,
     pub origin: Origin,
     pub attributes: Vec<Attribute>,
-    pub kind: InlineKind,
+    pub kind: InlineKind<C>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum InlineKind {
+pub(crate) enum InlineKind<C = Cell> {
     Text(String),
     Space,
     NonbreakingSpace,
     SoftBreak,
     HardBreak,
-    Emphasis(Vec<Inline>),
-    Strong(Vec<Inline>),
+    Emphasis(Vec<Inline<C>>),
+    Strong(Vec<Inline<C>>),
     Code(String),
-    Link(Link),
-    Image(Link),
+    Link(Link<C>),
+    Image(Link<C>),
     Math(String),
-    Span(Vec<Inline>),
+    Span(Vec<Inline<C>>),
     /// Panache can embed display math within a paragraph, including prose.
     DisplayMath(String),
     Raw(RawContent),
     Comment,
-    Unsupported(PreservedSyntax),
+    Unsupported(PreservedSyntax<C>),
 }
 
-impl Inline {
-    fn visit_blocks(&self, visitor: &mut impl FnMut(&Block), inlines: &mut impl FnMut(&Inline)) {
+impl<C> Inline<C> {
+    fn visit_blocks(
+        &self,
+        visitor: &mut impl FnMut(&Block<C>),
+        inlines: &mut impl FnMut(&Inline<C>),
+    ) {
         inlines(self);
         match &self.kind {
             InlineKind::Emphasis(content)
@@ -163,9 +174,9 @@ impl Inline {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Link {
+pub(crate) struct Link<C = Cell> {
     pub origin: Origin,
-    pub content: Vec<Inline>,
+    pub content: Vec<Inline<C>>,
     pub destination: Option<String>,
     pub title: Option<String>,
     /// Reference labels remain unresolved in the source model.
@@ -286,21 +297,25 @@ pub(crate) struct YamlProperty {
 /// An unsupported construct keeps its original tree, with known descendants
 /// lowered in place. Its origin retains the source for verbatim recovery.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct PreservedSyntax {
+pub(crate) struct PreservedSyntax<C = Cell> {
     pub origin: Origin,
     pub name: String,
-    pub children: Vec<PreservedChild>,
+    pub children: Vec<PreservedChild<C>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum PreservedChild {
-    Block(Box<Block>),
-    Inline(Box<Inline>),
-    Syntax(PreservedSyntax),
+pub(crate) enum PreservedChild<C = Cell> {
+    Block(Box<Block<C>>),
+    Inline(Box<Inline<C>>),
+    Syntax(PreservedSyntax<C>),
 }
 
-impl PreservedSyntax {
-    fn visit_blocks(&self, visitor: &mut impl FnMut(&Block), inlines: &mut impl FnMut(&Inline)) {
+impl<C> PreservedSyntax<C> {
+    fn visit_blocks(
+        &self,
+        visitor: &mut impl FnMut(&Block<C>),
+        inlines: &mut impl FnMut(&Inline<C>),
+    ) {
         for child in &self.children {
             match child {
                 PreservedChild::Block(block) => block.visit(visitor, inlines),

@@ -1,5 +1,6 @@
 //! Presentation backends.
 //!
-//! Reserved for rendering the backend-independent presentation IR once it is
-//! available. Backends consume computation results through references and do
-//! not own execution.
+//! Backends consume `document::Presentation`, whose cell leaves contain source
+//! display data and `ResultSlot` references. Ordered output is supplied through
+//! a separately validated result store; backends do not own execution. HTML
+//! emission and result lookup are subsequent compiler stages.
