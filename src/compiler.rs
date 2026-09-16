@@ -164,6 +164,7 @@ fn title(document: &SourceDocument) -> Option<&YamlValue> {
 mod tests {
     use super::*;
 
+    mod html_sections;
     mod presentation_ir;
     mod presentations;
     mod validation;

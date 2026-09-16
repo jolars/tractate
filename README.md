@@ -23,8 +23,10 @@ Inspection checks document-wide label uniqueness, label values, option names and
 scopes, and unsupported option syntax. Other option value types and default
 resolution remain subsequent compiler work.
 
-The `render` module reserves the boundary for future presentation backends; the
-planned execution and rendering behavior is described in [DESIGN.md](DESIGN.md).
+The internal HTML backend assembles slide bodies into Reveal sections keyed by
+semantic slide IDs. Markdown body rendering, identity matching across source
+revisions, and the render command remain roadmap items. The planned execution
+and rendering behavior is described in [DESIGN.md](DESIGN.md).
 
 ## Development
 

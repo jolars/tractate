@@ -1,6 +1,7 @@
 //! Semantic identities, computation reuse keys, and immutable artifact addresses.
 
 use std::cell::Cell;
+use std::fmt;
 
 /// A block or inline entity within a compilation's semantic identity scope.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -9,6 +10,13 @@ pub(crate) struct NodeId(u64);
 /// A slide entity, independent of its heading, position, or rendered bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) struct SlideId(u64);
+
+impl fmt::Display for SlideId {
+    /// Format the semantic handle within its compilation scope.
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(formatter)
+    }
+}
 
 /// An executable cell entity, independent of its computation's reuse key.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]

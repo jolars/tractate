@@ -93,6 +93,14 @@ checks title and content slide origins, Unicode and CRLF source snapshots, empty
 and consecutive headings, and retained source after the original document is
 dropped. These tests exercise the pure compiler without a renderer or runner.
 
+`src/compiler/tests/html_sections.rs` passes compiled presentations and supplied
+HTML bodies through the Reveal section assembler. It checks title, leading,
+duplicate-heading, and empty sections; order and body-byte preservation;
+retained semantic IDs after content, origin, and structural changes; QMD
+provenance; and body-error propagation. These tests exercise the backend's
+handling of retained IDs, not matching identities across reparses or Markdown
+body rendering.
+
 Malformed YAML fails inspection with syntax diagnostics. Unknown keys, invalid
 label values, and duplicate labels now fail inspection with semantic
 diagnostics; `summarize_document` still reports their syntax-only structural

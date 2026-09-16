@@ -1115,6 +1115,22 @@ Slide 17
 </section>
 ```
 
+The internal `render::html::render_sections` pass now assembles one section per
+presentation slide, preserving order and empty bodies. A separate body-rendering
+callback receives each complete slide and supplies HTML. Body errors propagate
+without returning a partial deck. The preamble does not create a section;
+document-scoped definitions remain available to the body renderer through the
+presentation. Markdown body rendering and result lookup remain subsequent work.
+
+Each `RenderedSlide` retains its typed `SlideId`, HTML fragment, and an
+`html-section` origin derived from the presentation slide. Its `data-slide-id`
+attribute encodes that semantic handle as `slide-N`. This attribute stays fixed
+when a retained slide changes content, source offsets, or position. It does not
+use heading text or source labels, so repeated headings receive distinct IDs.
+The attribute is scoped to the current compilation, just like `SlideId`.
+Retaining semantic IDs across reparsing still requires the compiler's planned
+label resolution and previous-revision matcher.
+
 During live preview, an edit to slide 17 should send only its new rendered
 representation to the browser.
 

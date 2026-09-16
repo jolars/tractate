@@ -94,7 +94,7 @@ introduced.
 
 - [x] Define a backend-independent presentation IR with result references or
   result slots, not embedded runner output.
-- [ ] Render each slide as a Reveal `<section>` with a stable slide ID.
+- [x] Render each slide as a Reveal `<section>` with a stable slide ID.
 - [ ] Support the MVP Markdown constructs in HTML, including source code and
   math.
 - [ ] Emit an HTML directory atomically with a content manifest and pinned or
