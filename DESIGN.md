@@ -1251,6 +1251,20 @@ produce `render.execution-unavailable`; this implementation has no runner path.
 Invalid `eval`, `echo`, and `include` values produce `option.invalid-value`.
 Declaration and backend errors retain their existing diagnostic codes.
 
+`tractate render SOURCE --no-execute` passes an explicit `RenderOptions` policy
+through the public `render_html_with_options(source, destination, options)`
+entry point. It preserves the effective `eval` value: disabled cells require no
+result, while enabled cells require one even with `echo: false`,
+`include: false`, or `results: hide`. All required results are currently
+unavailable because neither runners nor a result store exist. Each enabled cell
+therefore produces `render.result-unavailable` at its source location in this
+mode. Syntax, declaration, and Boolean option validation precede these checks.
+Documents with no required computation render normally; a missing result fails
+before publication and preserves the previous deck. Existing HTML and its
+content manifest are presentation artifacts and cannot establish result reuse.
+The later evaluation plan and result store must validate complete execution
+contracts before providing current or reusable results.
+
 Local Markdown images and linked files resolve from the source's parent.
 Percent-encoded UTF-8 paths are decoded before reading. Output URLs use a
 `resources/` path derived from a SHA-256 digest of the decoded source path,

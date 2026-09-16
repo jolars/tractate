@@ -45,10 +45,25 @@ Executable cells require `eval: false`, either locally or under the document's
 `execute` defaults; they honor `echo` and `include`. Rendering validates these
 three Boolean options, including overridden defaults. Cells that require
 execution fail with a QMD diagnostic because runners are not implemented yet.
-Other option value types, execution, caching, and `--no-execute` remain roadmap
-items. The library exposes the same build path as `render_html`, with structured
-`RenderError` diagnostics. Its private `build` module owns filesystem I/O around
-the pure compiler.
+
+Use `--no-execute` to forbid execution explicitly:
+
+```console
+cargo run -- render slides.qmd --to html --no-execute
+```
+
+Documents with no required computation render normally. A missing required
+result fails with `render.result-unavailable` at the cell's QMD location and
+preserves any previous deck. `echo: false`, `include: false`, and
+`results: hide` do not disable evaluation. Because runners and result caching
+are not implemented yet, every cell with effective `eval: true` has an
+unavailable result, even if a previous HTML deck exists.
+
+Other option value types, execution, and caching remain roadmap items. The
+library exposes `render_html` and `render_html_with_options`; pass
+`RenderOptions { no_execute: true }` to the latter for the same execution
+policy. Both return structured `RenderError` diagnostics. The private `build`
+module owns filesystem I/O around the pure compiler.
 
 The internal HTML backend renders Markdown, source code, and math markup into
 Reveal sections keyed by semantic slide IDs. Cell visibility and validated

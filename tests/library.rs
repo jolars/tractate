@@ -1,6 +1,48 @@
 use tractate::{DocumentSummary, summarize_document};
 
 #[test]
+fn public_no_execute_policy_reports_unavailable_results_with_retained_origins() {
+    use tractate::{DiagnosticCode, RenderError, RenderOptions, render_html_with_options};
+
+    let directory = tempfile::tempdir().unwrap();
+    let source = directory.path().join("slides.qmd");
+    let destination = directory.path().join("deck");
+    let text = "## Cells\n\n```{r}\n#| include: false\n1\n```\n";
+    std::fs::write(&source, text).unwrap();
+    for (options, code) in [
+        (
+            RenderOptions::default(),
+            DiagnosticCode::ExecutionUnavailable,
+        ),
+        (
+            RenderOptions { no_execute: true },
+            DiagnosticCode::ResultUnavailable,
+        ),
+    ] {
+        let error = render_html_with_options(&source, &destination, options).unwrap_err();
+        let RenderError::Diagnostics(diagnostics) = error else {
+            panic!("Expected source diagnostics");
+        };
+        assert_eq!(diagnostics.len(), 1);
+        let diagnostic = &diagnostics[0];
+        assert_eq!(diagnostic.code, code);
+        assert_eq!(diagnostic.severity, tractate::Severity::Error);
+        assert_eq!(
+            diagnostic.primary.source_span().text(),
+            "```{r}\n#| include: false\n1\n```\n"
+        );
+        assert_eq!(
+            diagnostic.primary.source_span().file().path(),
+            Some(source.as_path())
+        );
+        std::fs::write(&source, "## Revised\n").unwrap();
+        assert_eq!(diagnostic.primary.source_span().file().text(), text);
+        assert!(!destination.exists());
+        std::fs::write(&source, text).unwrap();
+    }
+}
+
+#[test]
 fn public_inspection_reports_semantics_and_retains_source_snapshots() {
     let source = include_str!("fixtures/duplicate-labels.qmd").to_owned();
     let inspection = tractate::inspect_document(&source);

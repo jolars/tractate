@@ -19,7 +19,10 @@ pub(crate) struct Resource {
     pub origin: Origin,
 }
 
-pub(crate) fn compile(source: SourceFile) -> Result<CompiledHtml, Vec<Diagnostic>> {
+pub(crate) fn compile(
+    source: SourceFile,
+    render_options: super::RenderOptions,
+) -> Result<CompiledHtml, Vec<Diagnostic>> {
     let lowered = crate::parser::lower(source.clone());
     let mut diagnostics = lowered.diagnostics;
     if diagnostics.iter().any(|d| d.severity == Severity::Error) {
@@ -57,11 +60,20 @@ pub(crate) fn compile(source: SourceFile) -> Result<CompiledHtml, Vec<Diagnostic
         if let BlockKind::Cell(cell) = &block.kind
             && policies[&cell.id].eval
         {
-            diagnostics.push(error(
-                DiagnosticCode::ExecutionUnavailable,
-                &cell.origin,
-                "this cell requires execution, which is not implemented yet; use `eval: false` to display source only",
-            ));
+            // No runner or result store exists yet, so every enabled cell's
+            // result is unavailable regardless of its presentation settings.
+            let (code, message) = if render_options.no_execute {
+                (
+                    DiagnosticCode::ResultUnavailable,
+                    "required result is unavailable; `--no-execute` forbids execution, and result caching is not implemented yet",
+                )
+            } else {
+                (
+                    DiagnosticCode::ExecutionUnavailable,
+                    "this cell requires execution, which is not implemented yet; use `eval: false` to display source only",
+                )
+            };
+            diagnostics.push(error(code, &cell.origin, message));
         }
     });
     if !diagnostics.is_empty() {

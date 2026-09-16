@@ -53,6 +53,14 @@ diagnostics, preservation of prior output on failure, input protection, and
 argument errors. Linux process traces cover source-only, disabled-cell,
 malformed, and execution-requiring documents without launching a runner.
 
+`cli/no_execute.rs` checks the explicit execution prohibition. Source-only
+documents, including disabled cells with defaults and nested overrides, must
+match a clean ordinary render byte for byte. Missing results produce one QMD
+diagnostic per enabled cell and preserve any previous HTML and manifest.
+Visibility and cache options cannot bypass this requirement. Invalid source is
+rejected before result checks, and Linux process traces verify that success and
+failure paths start no processes.
+
 `src/compiler/tests/html_directory.rs` compiles `static-deck.qmd` through the
 parser, presentation IR, HTML renderer, and directory writer without requesting
 cell results. It covers title and leading slides, math, literal dollar text,

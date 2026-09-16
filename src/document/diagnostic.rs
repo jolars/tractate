@@ -26,6 +26,7 @@ pub enum DiagnosticCode {
     UnsupportedHtml,
     InvalidOptionValue,
     ExecutionUnavailable,
+    ResultUnavailable,
     ResourceUnavailable,
 }
 
@@ -45,6 +46,7 @@ impl DiagnosticCode {
             Self::UnsupportedHtml => "render.unsupported-html",
             Self::InvalidOptionValue => "option.invalid-value",
             Self::ExecutionUnavailable => "render.execution-unavailable",
+            Self::ResultUnavailable => "render.result-unavailable",
             Self::ResourceUnavailable => "render.resource-unavailable",
         }
     }

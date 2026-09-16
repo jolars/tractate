@@ -3,7 +3,10 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand, ValueEnum};
-use tractate::{Diagnostic, Origin, RenderError, Severity, inspect_document, render_html};
+use tractate::{
+    Diagnostic, Origin, RenderError, RenderOptions, Severity, inspect_document,
+    render_html_with_options,
+};
 
 #[derive(Debug, Parser)]
 #[command(version, about)]
@@ -29,6 +32,9 @@ enum Command {
         /// Output directory, relative to the source's parent (default: <stem>_html).
         #[arg(short, long)]
         output: Option<PathBuf>,
+        /// Forbid execution; fail if a required cell result is unavailable.
+        #[arg(long)]
+        no_execute: bool,
     },
 }
 
@@ -54,7 +60,8 @@ fn run(cli: Cli) -> Result<(), String> {
             source,
             to: Format::Html,
             output,
-        } => render(&source, output),
+            no_execute,
+        } => render(&source, output, RenderOptions { no_execute }),
     }
 }
 
@@ -97,14 +104,14 @@ fn inspect(path: &Path) -> Result<(), String> {
     }
 }
 
-fn render(source: &Path, output: Option<PathBuf>) -> Result<(), String> {
+fn render(source: &Path, output: Option<PathBuf>, options: RenderOptions) -> Result<(), String> {
     let output = output.unwrap_or_else(|| {
         let mut name = source.file_stem().unwrap_or_default().to_os_string();
         name.push("_html");
         PathBuf::from(name)
     });
     let destination = source.parent().unwrap_or(Path::new(".")).join(output);
-    render_html(source, &destination).map_err(|error| {
+    render_html_with_options(source, &destination, options).map_err(|error| {
         if let RenderError::Diagnostics(diagnostics) = &error {
             print_diagnostics(source, diagnostics);
         }

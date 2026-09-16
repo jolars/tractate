@@ -12,6 +12,17 @@ mod presentation;
 pub(crate) mod static_html;
 mod validation;
 
+/// Policy for a one-shot render, independent of cell evaluation options.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct RenderOptions {
+    /// Forbid execution and require every enabled cell's result to be available.
+    ///
+    /// This does not change `eval`: hidden enabled cells still require results.
+    /// Runners and result caching are not implemented yet, so all enabled cells
+    /// currently fail with an unavailable-result diagnostic in this mode.
+    pub no_execute: bool,
+}
+
 /// Parse Quarto-flavored Markdown and report its computational structure.
 ///
 /// This operation is safe for editor and inspection use: it does not execute

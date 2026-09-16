@@ -101,7 +101,7 @@ introduced.
   bundled Reveal.js assets—do not depend on an unversioned CDN.
 - [x] Add `tractate render SOURCE --to html`; on source-only documents it should
   produce a complete deck without any runner infrastructure.
-- [ ] Make `render --no-execute` fail when a required result is neither present
+- [x] Make `render --no-execute` fail when a required result is neither present
   nor reusable, while allowing documents with no required computation to
   render.
 

@@ -1,4 +1,5 @@
 mod common;
+mod no_execute;
 mod render;
 mod slide_rules;
 mod source_fixtures;
