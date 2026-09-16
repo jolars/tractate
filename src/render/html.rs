@@ -5,11 +5,17 @@
 use crate::document::{Origin, Presentation, Slide, SlideId};
 
 mod content;
+mod directory;
 #[allow(
     unused_imports,
     reason = "The render command will consume this internal facade."
 )]
 pub(crate) use content::{CellContent, render_presentation};
+#[allow(
+    unused_imports,
+    reason = "The render command will consume this internal facade."
+)]
+pub(crate) use directory::{HtmlAsset, HtmlDirectory};
 
 /// One independently replaceable Reveal section and its semantic provenance.
 #[derive(Debug, Clone, PartialEq, Eq)]

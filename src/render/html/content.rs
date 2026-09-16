@@ -378,7 +378,7 @@ fn open(
     Ok(())
 }
 
-fn escape(text: &str, html: &mut String) {
+pub(super) fn escape(text: &str, html: &mut String) {
     for c in text.chars() {
         match c {
             '&' => html.push_str("&amp;"),

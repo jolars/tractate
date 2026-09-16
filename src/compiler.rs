@@ -165,6 +165,8 @@ mod tests {
     use super::*;
 
     mod html_content;
+    #[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
+    mod html_directory;
     mod html_sections;
     mod presentation_ir;
     mod presentations;

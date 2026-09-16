@@ -1141,9 +1141,10 @@ Text, attribute values, source code, and TeX are escaped for their HTML context.
 Inline math uses `span.math.inline` with `\(...\)` delimiters; display math uses
 `math.display` with `\[...\]`, retaining a span when Panache places it inside a
 paragraph. These delimiters are supported by the [Reveal math
-plugin](https://revealjs.com/math/). Typesetting requires that plugin and its
-pinned or bundled typesetter assets in the future HTML directory writer. Code
-remains in `pre` and `code` elements, which the math plugin skips.
+plugin](https://revealjs.com/math/). The HTML directory writer loads that plugin
+with a pinned KaTeX version and enables only these explicit delimiters, so
+ordinary dollar text remains prose. Code remains in `pre` and `code` elements,
+which the math plugin skips.
 
 Executable cells use their lowered source without the option preamble or host
 container prefixes. The caller supplies each cell's resolved source visibility
@@ -1182,10 +1183,51 @@ The browser should preserve:
 Global changes such as themes or Reveal configuration may require broader
 invalidation.
 
-The initial HTML output is a directory with pinned or bundled Reveal assets and
-a content manifest. The design should not depend on an unversioned CDN. Raw HTML
-and SVG originating in source or execution results must follow the preview trust
-policy.
+The internal `render::html::HtmlDirectory` assembles a complete output snapshot
+from a resolved title, rendered slides, and caller-supplied `HtmlAsset` bytes.
+It does not read source resources or resolve cell results. Callers must finish
+rendering, resolve local resource destinations, and supply their bytes before
+publication. Asset paths are relative to the output directory, use forward
+slashes, and cannot escape it or collide with generated files or each other.
+
+The initial HTML output contains `index.html`, supplied local assets, and
+`manifest.json`. It references Reveal.js 5.2.1 and KaTeX 0.16.22 through
+exact-version jsDelivr URLs. Reveal's serif theme uses system fonts; KaTeX's
+font URLs resolve relative to its pinned package. There are no unversioned
+runtime dependencies supplied by Tractate. Viewing requires network access, but
+building the directory does not fetch assets. Raw HTML and SVG originating in
+source or execution results must follow the preview trust policy.
+
+The manifest's version-one schema records:
+
+- `generator` (`tractate`), `schema_version` (`1`), and `entrypoint`
+  (`index.html`);
+- `files`, sorted by relative `path`, with byte counts and lowercase hexadecimal
+  `sha256` digests of the exact emitted bytes;
+- `slides`, in presentation order, with section `id` and `sha256` of each exact
+  HTML fragment;
+- `external_assets`, with pinned package names, versions, and base URLs covering
+  scripts, styles, and their relative resources.
+
+The manifest excludes itself to avoid a circular digest. It contains no output
+directory, timestamps, or staging names, so identical inputs produce identical
+bytes at different destinations. Slide IDs remain compilation-scoped handles,
+not content digests or persistent cache identities.
+
+`HtmlDirectory::write` stages all files in a private sibling directory and
+writes the manifest last. One atomic rename publishes a new output; one atomic
+directory exchange replaces an existing output. The parent must already exist,
+and an existing destination must be a real directory bearing a Tractate HTML
+manifest. Files, symlinks, and unrelated directories are rejected. Failed
+staging or publication preserves the prior deck. Successful replacement removes
+stale assets with the retired directory. Temporary and retired directories
+receive best-effort cleanup; an interrupted process may leave an unreferenced
+staging directory.
+
+Publication uses atomic rename flags on Linux, Android, and Apple platforms. An
+unsupported platform or filesystem returns an error without a non-atomic
+fallback. Atomic visibility does not promise power-loss durability or a snapshot
+across separate reader opens. Callers must serialize writers to one destination.
 
 --------------------------------------------------------------------------------
 

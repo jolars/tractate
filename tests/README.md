@@ -35,6 +35,20 @@ still run the inspection behavior and edit-sequence tests.
 The `malformed-*.qmd` fixtures contain intentional YAML syntax errors and are
 excluded from Panache formatting and linting.
 
+`src/render/html/directory/tests.rs` checks complete HTML documents, pinned
+Reveal and math dependencies, exact file and slide digests, deterministic
+output, local assets, path collisions, directory replacement, and failure
+preservation. The atomic-commit test verifies that complete old and new
+directory inodes swap places. Staging and publication failures must preserve the
+previous output and clean temporary files. Publication tests run on Linux,
+Android, and Apple platforms, where the writer supports atomic directory
+exchange.
+
+`src/compiler/tests/html_directory.rs` compiles `static-deck.qmd` through the
+parser, presentation IR, HTML renderer, and directory writer without requesting
+cell results. It covers title and leading slides, math, literal dollar text,
+ordinary code, and a supplied local image.
+
 ## Stage 1 source fixtures
 
 `cli/source_fixtures.rs`, included by the CLI integration tests, checks the

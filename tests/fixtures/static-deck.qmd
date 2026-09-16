@@ -1,0 +1,24 @@
+---
+title: A static deck
+---
+
+Some **leading content** with café and α.
+
+## Mathematics
+
+Inline $x^2$ and display math:
+
+$$
+  \sum_{i=1}^{n} x_i
+$$
+
+Ordinary prose costs \$5, then \$10.
+
+## Source and figures
+
+```r
+# Displayed code is never executed.
+stop("must not run")
+```
+
+![A circle](figures/plot.svg)

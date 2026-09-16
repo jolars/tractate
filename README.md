@@ -25,10 +25,13 @@ resolution remain subsequent compiler work.
 
 The internal HTML backend renders Markdown, source code, and math markup into
 Reveal sections keyed by semantic slide IDs. Cell visibility and validated
-result content are supplied separately, without execution. Complete HTML
-directories, bundled presentation and math assets, identity matching across
-revisions, and the render command remain roadmap items. The planned execution
-and rendering behavior is described in [DESIGN.md](DESIGN.md).
+result content are supplied separately, without execution. Its directory writer
+publishes complete decks atomically, with a SHA-256 content manifest, supplied
+local assets, and exact-version CDN references to Reveal.js and KaTeX. Viewing
+requires network access. Atomic publication is supported on Linux, Android, and
+Apple platforms when the filesystem supports directory exchange. Identity
+matching across revisions and the render command remain roadmap items. The
+planned execution and rendering behavior is described in [DESIGN.md](DESIGN.md).
 
 ## Development
 
