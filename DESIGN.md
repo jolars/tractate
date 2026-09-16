@@ -1120,7 +1120,38 @@ presentation slide, preserving order and empty bodies. A separate body-rendering
 callback receives each complete slide and supplies HTML. Body errors propagate
 without returning a partial deck. The preamble does not create a section;
 document-scoped definitions remain available to the body renderer through the
-presentation. Markdown body rendering and result lookup remain subsequent work.
+presentation.
+
+The internal `render::html::render_presentation` pass supplies Markdown bodies
+to that assembler. It renders scalar titles, all six heading levels, paragraphs,
+emphasis, strong text, inline and fenced code, nested bullet and decimal ordered
+lists (including loose and task lists), quotes, fenced divs, links, images and
+standalone image captions, spans and attributes, and horizontal rules. Reference
+links resolve against definitions across the entire document, including the
+preamble, with the first definition winning. Panache normalizes reference labels
+and decodes link destinations and titles at the parser boundary. Missing
+references retain their written Markdown. HTML containers preserve nested
+Markdown and cells. Raw HTML follows the source trust policy; comments and raw
+content for other backends are omitted. Unsupported constructs, including
+tables, footnotes, and nondecimal ordered lists, return
+`render.unsupported-html` diagnostics with QMD origins instead of silently
+dropping content.
+
+Text, attribute values, source code, and TeX are escaped for their HTML context.
+Inline math uses `span.math.inline` with `\(...\)` delimiters; display math uses
+`math.display` with `\[...\]`, retaining a span when Panache places it inside a
+paragraph. These delimiters are supported by the [Reveal math
+plugin](https://revealjs.com/math/). Typesetting requires that plugin and its
+pinned or bundled typesetter assets in the future HTML directory writer. Code
+remains in `pre` and `code` elements, which the math plugin skips.
+
+Executable cells use their lowered source without the option preamble or host
+container prefixes. The caller supplies each cell's resolved source visibility
+and already rendered, validated result content through `CellContent`. A hidden
+cell supplies neither source nor result content; a source-only cell supplies no
+results. Required-result failures propagate without returning a partial deck.
+This rendering boundary does not resolve execution options, look up results, or
+execute code. Those remain compiler and execution responsibilities.
 
 Each `RenderedSlide` retains its typed `SlideId`, HTML fragment, and an
 `html-section` origin derived from the presentation slide. Its `data-slide-id`

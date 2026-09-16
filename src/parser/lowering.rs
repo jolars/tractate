@@ -175,7 +175,18 @@ impl Lowerer {
                 value: self.yaml(node.syntax()),
             }),
             BlockNode::ReferenceDefinition(node) => {
-                BlockKind::ReferenceDefinition(self.preserve(node.syntax().clone().into()))
+                BlockKind::ReferenceDefinition(ReferenceDefinition {
+                    label: panache_parser::normalize_reference_label(
+                        &node
+                            .link()
+                            .and_then(|link| link.text())
+                            .map(|text| text.raw_label())
+                            .unwrap_or_default(),
+                    ),
+                    destination: node.url().map(|text| decode_link_text(&text)),
+                    title: node.title().map(|text| decode_link_text(&text)),
+                    syntax: self.preserve(node.syntax().clone().into()),
+                })
             }
             BlockNode::FootnoteDefinition(node) => {
                 BlockKind::FootnoteDefinition(self.preserve(node.syntax().clone().into()))
@@ -187,6 +198,9 @@ impl Lowerer {
             }),
             BlockNode::Unknown(node) => match node.syntax_kind() {
                 SyntaxKind::COMMENT => BlockKind::Comment,
+                SyntaxKind::HTML_BLOCK | SyntaxKind::HTML_BLOCK_DIV => BlockKind::Html(
+                    self.html_blocks(node.syntax_element().as_node().expect("HTML block")),
+                ),
                 SyntaxKind::HTML_BLOCK_RAW | SyntaxKind::INLINE_HTML => {
                     let text = node.source_text();
                     if text.trim_start().starts_with("<!--") {
@@ -204,7 +218,9 @@ impl Lowerer {
             BlockNode::Alert(node) => self.unsupported_block(node.syntax()),
             BlockNode::DefinitionList(node) => self.unsupported_block(node.syntax()),
             BlockNode::LineBlock(node) => self.unsupported_block(node.syntax()),
-            BlockNode::Figure(node) => self.unsupported_block(node.syntax()),
+            BlockNode::Figure(node) => {
+                BlockKind::Figure(self.inlines(node.image().map(InlineNode::Image)))
+            }
             BlockNode::Table(node) => self.unsupported_block(node.syntax()),
             BlockNode::MystDirective(node) => self.unsupported_block(node.syntax()),
             BlockNode::PandocTitleBlock(node) => self.unsupported_block(node.syntax()),
@@ -229,6 +245,36 @@ impl Lowerer {
         BlockKind::Unsupported(self.preserve(node.clone().into()))
     }
 
+    fn html_blocks(&self, node: &cst::SyntaxNode) -> Vec<Block> {
+        node.children_with_tokens()
+            .flat_map(|element| {
+                if element.kind() == SyntaxKind::HTML_BLOCK_CONTENT {
+                    return self.html_blocks(element.as_node().expect("HTML content"));
+                }
+                let block = BlockNode::cast(element.clone());
+                if !matches!(block, BlockNode::Unknown(_) | BlockNode::Trivia(_))
+                    || matches!(
+                        element.kind(),
+                        SyntaxKind::HTML_BLOCK | SyntaxKind::HTML_BLOCK_DIV | SyntaxKind::COMMENT
+                    )
+                {
+                    return self.block(block).into_iter().collect();
+                }
+                let origin = self.origin(range(element.text_range()));
+                vec![Block {
+                    id: self.ids.node(),
+                    origin: origin.clone(),
+                    attributes: Vec::new(),
+                    kind: BlockKind::Raw(RawContent {
+                        origin,
+                        format: "html".into(),
+                        text: element.to_string(),
+                    }),
+                }]
+            })
+            .collect()
+    }
+
     fn inline(&self, node: InlineNode) -> Option<Inline> {
         let source_range = range(node.text_range());
         let mut attributes = Vec::new();
@@ -244,21 +290,31 @@ impl Lowerer {
             InlineNode::Math(node) => InlineKind::Math(node.content()),
             InlineNode::Link(node) => {
                 attributes = self.attrs(node.attributes());
-                InlineKind::Link(self.link(
-                    self.origin(source_range),
-                    self.inlines(node.inline_nodes()),
-                    node.dest(),
-                    node.reference(),
-                ))
+                InlineKind::Link(
+                    self.link(
+                        self.origin(source_range),
+                        self.inlines(node.inline_nodes()),
+                        node.dest(),
+                        node.reference()
+                            .map(|reference| reference.label())
+                            .filter(|label| !label.is_empty())
+                            .or_else(|| node.text().map(|text| text.raw_label())),
+                    ),
+                )
             }
             InlineNode::Image(node) => {
                 attributes = self.attrs(node.attributes());
-                InlineKind::Image(self.link(
-                    self.origin(source_range),
-                    self.inlines(node.inline_nodes()),
-                    node.dest(),
-                    node.reference(),
-                ))
+                InlineKind::Image(
+                    self.link(
+                        self.origin(source_range),
+                        self.inlines(node.inline_nodes()),
+                        node.dest(),
+                        node.reference()
+                            .map(|reference| reference.label())
+                            .filter(|label| !label.is_empty())
+                            .or_else(|| node.alt().map(|alt| alt.syntax().text().to_string())),
+                    ),
+                )
             }
             InlineNode::AutoLink(node) => {
                 let target = node.target();
@@ -391,14 +447,23 @@ impl Lowerer {
         origin: Origin,
         content: Vec<Inline>,
         destination: Option<cst::LinkDest>,
-        reference: Option<cst::LinkRef>,
+        reference: Option<String>,
     ) -> Link {
         Link {
             origin,
             content,
-            destination: destination.as_ref().map(cst::LinkDest::url_content),
-            title: destination.as_ref().and_then(cst::LinkDest::title),
-            reference: reference.map(|reference| reference.label()),
+            destination: destination
+                .as_ref()
+                .map(|dest| decode_link_text(&dest.url_content())),
+            title: destination
+                .as_ref()
+                .and_then(cst::LinkDest::title)
+                .map(|text| decode_link_text(&text)),
+            reference: if destination.is_none() {
+                reference.map(|label| panache_parser::normalize_reference_label(&label))
+            } else {
+                None
+            },
         }
     }
 
@@ -594,4 +659,26 @@ fn token_text(node: &cst::SyntaxNode, kind: SyntaxKind) -> String {
         .filter(|token| token.kind() == kind)
         .map(|token| token.text().to_owned())
         .collect()
+}
+
+fn decode_link_text(text: &str) -> String {
+    use panache_parser::parser::utils::attributes::decode_html_attr_entities;
+
+    let mut decoded = String::new();
+    let mut start = 0;
+    let mut chars = text.char_indices().peekable();
+    while let Some((offset, c)) = chars.next() {
+        if c == '\\'
+            && chars
+                .peek()
+                .is_some_and(|(_, next)| next.is_ascii_punctuation())
+        {
+            decoded.push_str(&decode_html_attr_entities(&text[start..offset]));
+            let (offset, escaped) = chars.next().expect("peeked punctuation");
+            decoded.push(escaped);
+            start = offset + escaped.len_utf8();
+        }
+    }
+    decoded.push_str(&decode_html_attr_entities(&text[start..]));
+    decoded
 }

@@ -101,6 +101,16 @@ provenance; and body-error propagation. These tests exercise the backend's
 handling of retained IDs, not matching identities across reparses or Markdown
 body rendering.
 
+`src/compiler/tests/html_content.rs` renders the source-content fixture through
+Panache, semantic lowering, the presentation IR, and the HTML backend. It checks
+Markdown structure, nested and loose lists, task states, attributes, links and
+document-wide references, image alternative text and captions, code escaping,
+math delimiters, raw HTML, and LF/CRLF equivalence. Additional cases cover title
+decoding, nested cells inside HTML containers, supplied cell visibility and
+results, and QMD diagnostics for unsupported content and unavailable results.
+The cell callback supplies display data without running code; option resolution
+and result lookup remain separate compiler work.
+
 Malformed YAML fails inspection with syntax diagnostics. Unknown keys, invalid
 label values, and duplicate labels now fail inspection with semantic
 diagnostics; `summarize_document` still reports their syntax-only structural

@@ -3,7 +3,7 @@
 //! Backends consume `document::Presentation`, whose cell leaves contain source
 //! display data and `ResultSlot` references. Ordered output is supplied through
 //! a separately validated result store; backends do not own execution. HTML
-//! section assembly lives here; Markdown body rendering and result lookup are
-//! subsequent compiler stages.
+//! sections and Markdown body rendering live here. Cell visibility and validated
+//! result content are explicit caller inputs; result lookup is subsequent work.
 
 pub(crate) mod html;

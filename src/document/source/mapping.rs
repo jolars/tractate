@@ -11,6 +11,7 @@ impl<C> Block<C> {
             },
             BlockKind::Paragraph(content) => BlockKind::Paragraph(map_inlines(content, map)),
             BlockKind::Plain(content) => BlockKind::Plain(map_inlines(content, map)),
+            BlockKind::Figure(content) => BlockKind::Figure(map_inlines(content, map)),
             BlockKind::List(list) => BlockKind::List(List {
                 origin: list.origin,
                 kind: list.kind,
@@ -28,6 +29,7 @@ impl<C> Block<C> {
             }),
             BlockKind::Quote(blocks) => BlockKind::Quote(map_blocks(blocks, map)),
             BlockKind::Div(blocks) => BlockKind::Div(map_blocks(blocks, map)),
+            BlockKind::Html(blocks) => BlockKind::Html(map_blocks(blocks, map)),
             BlockKind::Code(code) => BlockKind::Code(code),
             BlockKind::Cell(cell) => BlockKind::Cell(map(cell)),
             BlockKind::Math(text) => BlockKind::Math(text),
@@ -35,7 +37,12 @@ impl<C> Block<C> {
             BlockKind::Raw(raw) => BlockKind::Raw(raw),
             BlockKind::Comment => BlockKind::Comment,
             BlockKind::ReferenceDefinition(node) => {
-                BlockKind::ReferenceDefinition(node.map_cells(map))
+                BlockKind::ReferenceDefinition(ReferenceDefinition {
+                    label: node.label,
+                    destination: node.destination,
+                    title: node.title,
+                    syntax: node.syntax.map_cells(map),
+                })
             }
             BlockKind::FootnoteDefinition(node) => {
                 BlockKind::FootnoteDefinition(node.map_cells(map))

@@ -23,8 +23,10 @@ Inspection checks document-wide label uniqueness, label values, option names and
 scopes, and unsupported option syntax. Other option value types and default
 resolution remain subsequent compiler work.
 
-The internal HTML backend assembles slide bodies into Reveal sections keyed by
-semantic slide IDs. Markdown body rendering, identity matching across source
+The internal HTML backend renders Markdown, source code, and math markup into
+Reveal sections keyed by semantic slide IDs. Cell visibility and validated
+result content are supplied separately, without execution. Complete HTML
+directories, bundled presentation and math assets, identity matching across
 revisions, and the render command remain roadmap items. The planned execution
 and rendering behavior is described in [DESIGN.md](DESIGN.md).
 

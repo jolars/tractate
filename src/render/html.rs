@@ -1,11 +1,15 @@
-//! Reveal section assembly, independent of slide body rendering.
+//! Reveal sections and Markdown content, independent of cell execution.
 
-#![allow(
-    dead_code,
-    reason = "The HTML body renderer and render command are subsequent roadmap items."
-)]
+#![allow(dead_code, reason = "The render command is a subsequent roadmap item.")]
 
 use crate::document::{Origin, Presentation, Slide, SlideId};
+
+mod content;
+#[allow(
+    unused_imports,
+    reason = "The render command will consume this internal facade."
+)]
+pub(crate) use content::{CellContent, render_presentation};
 
 /// One independently replaceable Reveal section and its semantic provenance.
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -49,16 +49,19 @@ pub(crate) enum BlockKind<C = Cell> {
     },
     Paragraph(Vec<Inline<C>>),
     Plain(Vec<Inline<C>>),
+    Figure(Vec<Inline<C>>),
     List(List<C>),
     Quote(Vec<Block<C>>),
     Div(Vec<Block<C>>),
+    /// HTML tags interleaved with Markdown blocks, as parsed by Panache.
+    Html(Vec<Block<C>>),
     Code(Code),
     Cell(C),
     Math(String),
     ThematicBreak,
     Raw(RawContent),
     Comment,
-    ReferenceDefinition(PreservedSyntax<C>),
+    ReferenceDefinition(ReferenceDefinition<C>),
     FootnoteDefinition(PreservedSyntax<C>),
     Metadata(Metadata),
     Unsupported(PreservedSyntax<C>),
@@ -70,6 +73,7 @@ impl<C> Block<C> {
         match &self.kind {
             BlockKind::Heading { content, .. }
             | BlockKind::Paragraph(content)
+            | BlockKind::Figure(content)
             | BlockKind::Plain(content) => {
                 for inline in content {
                     inline.visit_blocks(visitor, inlines);
@@ -82,14 +86,15 @@ impl<C> Block<C> {
                     }
                 }
             }
-            BlockKind::Quote(blocks) | BlockKind::Div(blocks) => {
+            BlockKind::Quote(blocks) | BlockKind::Div(blocks) | BlockKind::Html(blocks) => {
                 for block in blocks {
                     block.visit(visitor, inlines);
                 }
             }
-            BlockKind::ReferenceDefinition(node)
-            | BlockKind::FootnoteDefinition(node)
-            | BlockKind::Unsupported(node) => node.visit_blocks(visitor, inlines),
+            BlockKind::ReferenceDefinition(node) => node.syntax.visit_blocks(visitor, inlines),
+            BlockKind::FootnoteDefinition(node) | BlockKind::Unsupported(node) => {
+                node.visit_blocks(visitor, inlines)
+            }
             _ => {}
         }
     }
@@ -179,8 +184,16 @@ pub(crate) struct Link<C = Cell> {
     pub content: Vec<Inline<C>>,
     pub destination: Option<String>,
     pub title: Option<String>,
-    /// Reference labels remain unresolved in the source model.
+    /// Reference labels are normalized by Panache but remain unresolved.
     pub reference: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ReferenceDefinition<C = Cell> {
+    pub label: String,
+    pub destination: Option<String>,
+    pub title: Option<String>,
+    pub syntax: PreservedSyntax<C>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

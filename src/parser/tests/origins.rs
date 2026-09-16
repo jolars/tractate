@@ -188,6 +188,7 @@ impl OriginAudit {
         match &block.kind {
             BlockKind::Heading { content, .. }
             | BlockKind::Paragraph(content)
+            | BlockKind::Figure(content)
             | BlockKind::Plain(content) => {
                 for inline in content {
                     self.inline(inline);
@@ -202,7 +203,7 @@ impl OriginAudit {
                     }
                 }
             }
-            BlockKind::Quote(blocks) | BlockKind::Div(blocks) => {
+            BlockKind::Quote(blocks) | BlockKind::Div(blocks) | BlockKind::Html(blocks) => {
                 for block in blocks {
                     self.block(block);
                 }
@@ -226,9 +227,10 @@ impl OriginAudit {
             }
             BlockKind::Raw(raw) => self.origin(&raw.origin),
             BlockKind::Metadata(metadata) => self.metadata(metadata),
-            BlockKind::ReferenceDefinition(syntax)
-            | BlockKind::FootnoteDefinition(syntax)
-            | BlockKind::Unsupported(syntax) => self.syntax(syntax),
+            BlockKind::ReferenceDefinition(node) => self.syntax(&node.syntax),
+            BlockKind::FootnoteDefinition(syntax) | BlockKind::Unsupported(syntax) => {
+                self.syntax(syntax)
+            }
             BlockKind::Math(_) | BlockKind::ThematicBreak | BlockKind::Comment => {}
         }
     }

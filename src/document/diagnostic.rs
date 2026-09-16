@@ -23,6 +23,7 @@ pub enum DiagnosticCode {
     UnsupportedOptionSyntax,
     InvalidLabel,
     DuplicateLabel,
+    UnsupportedHtml,
 }
 
 impl DiagnosticCode {
@@ -38,6 +39,7 @@ impl DiagnosticCode {
             Self::UnsupportedOptionSyntax => "option.unsupported-syntax",
             Self::InvalidLabel => "option.invalid-label",
             Self::DuplicateLabel => "semantic.duplicate-label",
+            Self::UnsupportedHtml => "render.unsupported-html",
         }
     }
 }
