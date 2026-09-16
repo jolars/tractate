@@ -99,7 +99,7 @@ introduced.
   math.
 - [x] Emit an HTML directory atomically with a content manifest and pinned or
   bundled Reveal.js assets—do not depend on an unversioned CDN.
-- [ ] Add `tractate render SOURCE --to html`; on source-only documents it should
+- [x] Add `tractate render SOURCE --to html`; on source-only documents it should
   produce a complete deck without any runner infrastructure.
 - [ ] Make `render --no-execute` fail when a required result is neither present
   nor reusable, while allowing documents with no required computation to

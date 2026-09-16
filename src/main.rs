@@ -2,8 +2,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use clap::{Parser, Subcommand};
-use tractate::{Origin, Severity, inspect_document};
+use clap::{Parser, Subcommand, ValueEnum};
+use tractate::{Diagnostic, Origin, RenderError, Severity, inspect_document, render_html};
 
 #[derive(Debug, Parser)]
 #[command(version, about)]
@@ -19,6 +19,22 @@ enum Command {
         /// Computational Markdown source to inspect.
         source: PathBuf,
     },
+    /// Render a source-only presentation to a complete HTML directory.
+    Render {
+        /// Computational Markdown source to render.
+        source: PathBuf,
+        /// Presentation output format.
+        #[arg(long, value_enum, default_value = "html")]
+        to: Format,
+        /// Output directory, relative to the source's parent (default: <stem>_html).
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum Format {
+    Html,
 }
 
 fn main() -> ExitCode {
@@ -34,6 +50,11 @@ fn main() -> ExitCode {
 fn run(cli: Cli) -> Result<(), String> {
     match cli.command {
         Command::Inspect { source } => inspect(&source),
+        Command::Render {
+            source,
+            to: Format::Html,
+            output,
+        } => render(&source, output),
     }
 }
 
@@ -57,7 +78,44 @@ fn inspect(path: &Path) -> Result<(), String> {
     println!("parse errors: {}", summary.parse_errors);
     println!("semantic errors: {}", inspection.semantic_errors());
 
-    for diagnostic in &inspection.diagnostics {
+    print_diagnostics(path, &inspection.diagnostics);
+
+    if !inspection.has_errors() {
+        Ok(())
+    } else if summary.parse_errors > 0 {
+        Err(format!(
+            "parser reported {} error(s) in `{}`",
+            summary.parse_errors,
+            path.display()
+        ))
+    } else {
+        Err(format!(
+            "inspection reported {} semantic error(s) in `{}`",
+            inspection.semantic_errors(),
+            path.display()
+        ))
+    }
+}
+
+fn render(source: &Path, output: Option<PathBuf>) -> Result<(), String> {
+    let output = output.unwrap_or_else(|| {
+        let mut name = source.file_stem().unwrap_or_default().to_os_string();
+        name.push("_html");
+        PathBuf::from(name)
+    });
+    let destination = source.parent().unwrap_or(Path::new(".")).join(output);
+    render_html(source, &destination).map_err(|error| {
+        if let RenderError::Diagnostics(diagnostics) = &error {
+            print_diagnostics(source, diagnostics);
+        }
+        error.to_string()
+    })?;
+    println!("output: {}", destination.join("index.html").display());
+    Ok(())
+}
+
+fn print_diagnostics(path: &Path, diagnostics: &[Diagnostic]) {
+    for diagnostic in diagnostics {
         let severity = match diagnostic.severity {
             Severity::Error => "error",
             Severity::Warning => "warning",
@@ -76,22 +134,6 @@ fn inspect(path: &Path) -> Result<(), String> {
                 related.message
             );
         }
-    }
-
-    if !inspection.has_errors() {
-        Ok(())
-    } else if summary.parse_errors > 0 {
-        Err(format!(
-            "parser reported {} error(s) in `{}`",
-            summary.parse_errors,
-            path.display()
-        ))
-    } else {
-        Err(format!(
-            "inspection reported {} semantic error(s) in `{}`",
-            inspection.semantic_errors(),
-            path.display()
-        ))
     }
 }
 

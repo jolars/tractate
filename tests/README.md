@@ -44,6 +44,15 @@ previous output and clean temporary files. Publication tests run on Linux,
 Android, and Apple platforms, where the writer supports atomic directory
 exchange.
 
+`cli/render.rs` exercises the public render command end to end. The source-only
+`static-deck.qmd` fixture and its `figures/plot.svg` resource produce a complete
+deck with a title, leading prose, math, and ordinary source code. Tests verify
+the HTML, exact manifest hashes, resource copying and reference resolution,
+source-relative output paths, disabled cells and Boolean defaults, QMD
+diagnostics, preservation of prior output on failure, input protection, and
+argument errors. Linux process traces cover source-only, disabled-cell,
+malformed, and execution-requiring documents without launching a runner.
+
 `src/compiler/tests/html_directory.rs` compiles `static-deck.qmd` through the
 parser, presentation IR, HTML renderer, and directory writer without requesting
 cell results. It covers title and leading slides, math, literal dollar text,
@@ -137,12 +146,13 @@ declarations, failure status, and absence of process launches. The public
 library test verifies that diagnostics retain the source snapshot after edits
 and dropping the original string.
 
-The defaults fixture preserves both scopes without resolving them: the first
-cell should inherit document defaults, and local options in the second should
-override the corresponding defaults. Other option value types and effective
-option resolution remain subsequent compiler work. The supported types,
-defaults, scopes, invalidation classes, and behavioral acceptance cases are now
-specified in the cell option contract in `DESIGN.md`. Execution and incremental
+The source-fixture tests preserve both default scopes without resolving them:
+the first cell should inherit document defaults, and local options in the second
+should override the corresponding defaults. Other option value types and
+effective option resolution beyond the static renderer's `eval`, `echo`, and
+`include` remain subsequent compiler work. The supported types, defaults,
+scopes, invalidation classes, and behavioral acceptance cases are now specified
+in the cell option contract in `DESIGN.md`. Execution and incremental
 invalidation remain later roadmap items.
 
 The option boundary tests use Panache's raw declarations, scalar styles, and
@@ -150,11 +160,12 @@ sequence nodes without coercing values or applying its R Markdown compatibility
 resolver. They also check that option ranges slice the original QMD correctly,
 including Unicode and prefixed multiline captions. Block scalar values retain
 their header in panache-parser 0.29, so these tests check preservation rather
-than pretending to decode captions. Only label type rejection is currently
-implemented; effective default resolution, other option value validation, and
-execution invalidation remain later work. A local `panache-ignore-format`
-directive preserves the deliberate Boolean spellings, quote styles, and physical
-caption lines in `option-type-boundaries.qmd`.
+than pretending to decode captions. Inspection currently rejects invalid label
+types; the static renderer also validates and resolves the three Boolean display
+and evaluation options. Other option value validation and execution invalidation
+remain later work. A local `panache-ignore-format` directive preserves the
+deliberate Boolean spellings, quote styles, and physical caption lines in
+`option-type-boundaries.qmd`.
 
 The internal origin tests in `src/parser/tests/origins.rs` walk every semantic
 node in all QMD fixtures with LF and CRLF line endings, including rejected

@@ -1,20 +1,12 @@
 //! Reveal sections and Markdown content, independent of cell execution.
 
-#![allow(dead_code, reason = "The render command is a subsequent roadmap item.")]
-
 use crate::document::{Origin, Presentation, Slide, SlideId};
 
 mod content;
 mod directory;
-#[allow(
-    unused_imports,
-    reason = "The render command will consume this internal facade."
-)]
-pub(crate) use content::{CellContent, render_presentation};
-#[allow(
-    unused_imports,
-    reason = "The render command will consume this internal facade."
-)]
+#[cfg(test)]
+pub(crate) use content::render_presentation;
+pub(crate) use content::{CellContent, render_with_resources, title_text};
 pub(crate) use directory::{HtmlAsset, HtmlDirectory};
 
 /// One independently replaceable Reveal section and its semantic provenance.

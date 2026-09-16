@@ -22,7 +22,7 @@ fn html_directory_compiles_source_only_qmd_without_cell_results() {
         &slides,
         &[HtmlAsset {
             path: "figures/plot.svg",
-            bytes: b"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"100\" height=\"100\"><circle cx=\"50\" cy=\"50\" r=\"40\"/></svg>",
+            bytes: include_bytes!("../../../tests/fixtures/figures/plot.svg"),
         }],
     )
     .unwrap();

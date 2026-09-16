@@ -32,9 +32,21 @@ impl CellContent {
 /// not a source-only cell. Unsupported Markdown also fails with a QMD origin.
 /// Math uses escaped TeX inside explicit delimiters for Reveal's math plugin;
 /// loading and configuring that plugin belongs to the HTML directory writer.
+#[cfg(test)]
 pub(crate) fn render_presentation(
     presentation: &Presentation,
+    cell_content: impl FnMut(&PresentedCell) -> Result<CellContent, Diagnostic>,
+) -> Result<Vec<RenderedSlide>, Diagnostic> {
+    render_with_resources(presentation, cell_content, |destination, _| {
+        Ok(destination.to_owned())
+    })
+}
+
+/// Resolve only destinations actually emitted, including document-wide references.
+pub(crate) fn render_with_resources(
+    presentation: &Presentation,
     mut cell_content: impl FnMut(&PresentedCell) -> Result<CellContent, Diagnostic>,
+    mut resource: impl FnMut(&str, &Origin) -> Result<String, Diagnostic>,
 ) -> Result<Vec<RenderedSlide>, Diagnostic> {
     let mut references = HashMap::new();
     presentation.visit_blocks(&mut |block| {
@@ -47,6 +59,7 @@ pub(crate) fn render_presentation(
     let mut renderer = Renderer {
         references,
         cell_content: &mut cell_content,
+        resource: &mut resource,
     };
     render_sections(presentation, |slide| {
         let mut html = String::new();
@@ -62,12 +75,17 @@ pub(crate) fn render_presentation(
     })
 }
 
-struct Renderer<'a, F> {
+struct Renderer<'a, F, R> {
     references: HashMap<String, (Option<String>, Option<String>)>,
     cell_content: &'a mut F,
+    resource: &'a mut R,
 }
 
-impl<F: FnMut(&PresentedCell) -> Result<CellContent, Diagnostic>> Renderer<'_, F> {
+impl<F, R> Renderer<'_, F, R>
+where
+    F: FnMut(&PresentedCell) -> Result<CellContent, Diagnostic>,
+    R: FnMut(&str, &Origin) -> Result<String, Diagnostic>,
+{
     fn blocks(
         &mut self,
         blocks: &[Block<PresentedCell>],
@@ -268,6 +286,7 @@ impl<F: FnMut(&PresentedCell) -> Result<CellContent, Diagnostic>> Renderer<'_, F
                         continue;
                     };
                     let image = matches!(inline.kind, InlineKind::Image(_));
+                    let destination = (self.resource)(destination, &link.origin)?;
                     let alt = plain_text(&link.content);
                     let mut extra =
                         vec![(if image { "src" } else { "href" }, destination.as_str())];
@@ -420,7 +439,7 @@ fn plain_text(inlines: &[Inline<PresentedCell>]) -> String {
     text
 }
 
-fn title_text(title: &YamlValue) -> Result<String, Diagnostic> {
+pub(crate) fn title_text(title: &YamlValue) -> Result<String, Diagnostic> {
     match &title.kind {
         YamlKind::Scalar {
             text,

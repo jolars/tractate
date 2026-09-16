@@ -42,11 +42,15 @@ impl TestProject {
     }
 
     pub fn inspect(&self) -> CliOutput {
+        self.run(&["inspect", "slides.qmd"])
+    }
+
+    pub fn run(&self, args: &[&str]) -> CliOutput {
         Command::new(env!("CARGO_BIN_EXE_tractate"))
             .current_dir(self.root())
-            .args(["inspect", "slides.qmd"])
+            .args(args)
             .output()
-            .expect("run tractate inspect")
+            .expect("run tractate")
             .into()
     }
 }

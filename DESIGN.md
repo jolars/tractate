@@ -424,9 +424,13 @@ and literal and folded captions. `invalid-option-types.qmd` and
 `invalid-option-values.qmd` preserve wrong types, nulls, invalid enums, empty
 names, mixed input lists, and invalid dimensions. The library's syntax-only
 `summarize_document` continues to accept syntactically valid declarations.
-`inspect_document` and the CLI additionally validate label values and
+`inspect_document` and `tractate inspect` additionally validate label values and
 uniqueness, option names and scopes, and unsupported option syntax. Other option
-value types and effective default resolution remain subsequent compiler work.
+value types and effective default resolution remain subsequent compiler work,
+except that the static render path now validates and resolves `eval`, `echo`,
+and `include` as YAML Booleans. It checks overridden defaults, displays disabled
+cells according to their effective visibility, and rejects enabled cells until
+execution is implemented.
 
 The incremental compiler and fake-runner stages must turn the following edit
 cases into behavioral tests, each compared with a clean full build:
@@ -1122,7 +1126,7 @@ without returning a partial deck. The preamble does not create a section;
 document-scoped definitions remain available to the body renderer through the
 presentation.
 
-The internal `render::html::render_presentation` pass supplies Markdown bodies
+The internal `render::html::render_with_resources` pass supplies Markdown bodies
 to that assembler. It renders scalar titles, all six heading levels, paragraphs,
 emphasis, strong text, inline and fenced code, nested bullet and decimal ordered
 lists (including loose and task lists), quotes, fenced divs, links, images and
@@ -1152,7 +1156,10 @@ and already rendered, validated result content through `CellContent`. A hidden
 cell supplies neither source nor result content; a source-only cell supplies no
 results. Required-result failures propagate without returning a partial deck.
 This rendering boundary does not resolve execution options, look up results, or
-execute code. Those remain compiler and execution responsibilities.
+execute code. Those remain compiler and execution responsibilities. A separate
+callback resolves emitted link and image destinations, including reference
+links, before HTML escaping. Tests can use `render_presentation` to preserve
+destinations unchanged.
 
 Each `RenderedSlide` retains its typed `SlideId`, HTML fragment, and an
 `html-section` origin derived from the presentation slide. Its `data-slide-id`
@@ -1228,6 +1235,35 @@ Publication uses atomic rename flags on Linux, Android, and Apple platforms. An
 unsupported platform or filesystem returns an error without a non-atomic
 fallback. Atomic visibility does not promise power-loss durability or a snapshot
 across separate reader opens. Callers must serialize writers to one destination.
+
+`tractate render SOURCE --to html` now exposes this pipeline for source-only
+documents. HTML is the default target. The default directory is
+`<source-stem>_html` beside the source; `--output`/`-o` accepts an absolute path
+or a path relative to the source's parent. The command reports the emitted
+`index.html` path. The browser title uses the decoded title-slide metadata or
+the source filename stem when no title slide exists.
+
+The public `render_html(source, destination)` function uses the destination as
+supplied. Its private `build` module reads files and publishes output, while
+`compiler::static_html` validates, resolves source visibility, and prepares
+slides and resource dependencies without I/O. Cells with effective `eval: true`
+produce `render.execution-unavailable`; this implementation has no runner path.
+Invalid `eval`, `echo`, and `include` values produce `option.invalid-value`.
+Declaration and backend errors retain their existing diagnostic codes.
+
+Local Markdown images and linked files resolve from the source's parent.
+Percent-encoded UTF-8 paths are decoded before reading. Output URLs use a
+`resources/` path derived from a SHA-256 digest of the decoded source path,
+retaining alphanumeric file extensions. This supports parent-relative and
+absolute filesystem paths without output traversal or generated-file collisions.
+Repeated destinations share a copy; query strings and fragments are preserved on
+each emitted URL. Scheme URLs, protocol-relative URLs, and fragment-only or
+query-only links stay unchanged and are not fetched. Raw HTML and the contents
+of copied resources are not scanned for further dependencies. Missing or invalid
+local resources produce `render.resource-unavailable` at the referring QMD
+location. All validation, rendering, and resource reads finish before
+publication. An existing output that contains the source or a local resource is
+rejected, including when an input reaches it through a symlink.
 
 --------------------------------------------------------------------------------
 
@@ -1558,6 +1594,7 @@ src/
   document/       semantic IR, origins, IDs, and diagnostics
   parser/         Panache integration and semantic lowering
   compiler/       pure dependency graph and invalidation
+  build.rs        one-shot filesystem orchestration and publication
   execution/      plans, scheduler, cache, artifacts, and runner protocol
   runners/r/      R runtime bridge
   render/html/    Reveal.js output

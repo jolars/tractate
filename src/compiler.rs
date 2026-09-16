@@ -9,6 +9,7 @@ use crate::document::{
 use crate::parser;
 
 mod presentation;
+pub(crate) mod static_html;
 mod validation;
 
 /// Parse Quarto-flavored Markdown and report its computational structure.
