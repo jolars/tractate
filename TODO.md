@@ -107,7 +107,7 @@ introduced.
 
 ### 1.4 Establish the incremental pure core
 
-- [ ] Introduce monotonically increasing source revisions and a long-lived
+- [x] Introduce monotonically increasing source revisions and a long-lived
   in-memory compiler state.
 - [ ] Track dependencies from source through semantic blocks, slides, and
   rendered slide fragments; keep effects out of tracked queries.

@@ -625,6 +625,30 @@ The preview process should maintain an in-memory build graph across source
 revisions. Persistent execution results and artifacts live in the filesystem
 cache; the dependency graph itself need not survive process restarts initially.
 
+The current `Compiler` owns the latest immutable `CompilerSnapshot` for one
+document. A snapshot shares its supplied `SourceFile`, lowered presentation,
+summary, and syntax and declaration diagnostics through `Arc`. Snapshot reads
+and clones do not parse again. Construction and `update_source` perform no I/O
+or execution; filesystem orchestration remains in `build`.
+
+`SourceRevision` is an opaque counter scoped to one compiler, beginning at zero.
+A change to the original source bytes or supplied path advances it by one.
+Submitting identical input, even through a newly allocated `SourceFile`, keeps
+the existing revision and snapshot. Invalid edits and reversions advance just
+like valid edits. Revision exhaustion panics before changing state; the counter
+never wraps. Independent compiler instances have independent revision sequences,
+so their revision numbers cannot establish input identity or result validity.
+
+An invalid update replaces the current state with the new source and its own
+diagnostics. Callers may retain previous snapshots, whose origins continue to
+resolve against their original source. The compiler itself retains only the
+current snapshot, allowing unused revisions to be released. The one-shot
+inspection and render entry points create a compiler, and HTML preparation
+consumes its stored presentation and diagnostics. Each changed input currently
+rebuilds the full presentation. Tracking dependencies, matching semantic
+identities, reusing fragments across edits, and reporting slide changes remain
+subsequent work.
+
 Conceptually:
 
 ```text

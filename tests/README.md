@@ -25,6 +25,15 @@ CLI output with inspection in a new temporary project after each edit.
 Inspection parses from scratch. When the incremental compiler exists, its
 retained state can use the same assertion helper.
 
+`compiler_state.rs` exercises the public long-lived compiler across source and
+path changes, identical updates, reversions, invalid input, and repair. It
+checks revision ordering, retained source origins and diagnostics, absence of
+filesystem access, and inspection equivalence with clean builds.
+`src/compiler/state/tests.rs` also checks revision exhaustion, shared snapshot
+reads, release of unused revisions, and HTML preparation from current and
+retained snapshots. Rendered HTML, resource dependencies, and errors are
+compared with clean builds after each edit in both execution modes.
+
 On Linux, `cli/common/process.rs` uses `strace` to follow process creation and
 exec calls, including failed attempts and descendants. Only the initial exec of
 the program under test is excluded. A control test deliberately launches a child

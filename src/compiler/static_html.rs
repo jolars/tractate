@@ -20,30 +20,26 @@ pub(crate) struct Resource {
 }
 
 pub(crate) fn compile(
-    source: SourceFile,
+    snapshot: &super::CompilerSnapshot,
     render_options: super::RenderOptions,
 ) -> Result<CompiledHtml, Vec<Diagnostic>> {
-    let lowered = crate::parser::lower(source.clone());
-    let mut diagnostics = lowered.diagnostics;
-    if diagnostics.iter().any(|d| d.severity == Severity::Error) {
-        return Err(diagnostics);
-    }
-    diagnostics.extend(super::validation::validate(&lowered.document));
+    let mut diagnostics = snapshot.inspection().diagnostics.clone();
     if !diagnostics.is_empty() {
         return Err(diagnostics);
     }
+    let presentation = snapshot.presentation();
 
     let mut defaults = DisplayOptions::default();
-    for metadata in &lowered.document.metadata {
+    for metadata in &presentation.metadata {
         defaults.apply_metadata(metadata, &mut diagnostics);
     }
-    lowered.document.visit_blocks(&mut |block| {
+    presentation.visit_blocks(&mut |block| {
         if let BlockKind::Metadata(metadata) = &block.kind {
             defaults.apply_metadata(metadata, &mut diagnostics);
         }
     });
     let mut policies = BTreeMap::new();
-    lowered.document.visit_blocks(&mut |block| {
+    presentation.visit_blocks(&mut |block| {
         if let BlockKind::Cell(cell) = &block.kind {
             let mut options = defaults;
             if let Some(preamble) = &cell.preamble {
@@ -56,7 +52,7 @@ pub(crate) fn compile(
         return Err(diagnostics);
     }
 
-    lowered.document.visit_blocks(&mut |block| {
+    presentation.visit_blocks(&mut |block| {
         if let BlockKind::Cell(cell) = &block.kind
             && policies[&cell.id].eval
         {
@@ -80,8 +76,6 @@ pub(crate) fn compile(
         return Err(diagnostics);
     }
 
-    let presentation =
-        super::presentation::lower_presentation(super::build_presentation(lowered.document));
     let title = presentation
         .slides
         .iter()
@@ -92,7 +86,8 @@ pub(crate) fn compile(
         .transpose()
         .map_err(|d| vec![d])?
         .unwrap_or_else(|| {
-            source
+            snapshot
+                .source()
                 .path()
                 .and_then(|path| path.file_stem())
                 .map(|stem| stem.to_string_lossy().into_owned())
@@ -100,7 +95,7 @@ pub(crate) fn compile(
         });
     let mut resources = BTreeMap::new();
     let slides = html::render_with_resources(
-        &presentation,
+        presentation,
         |cell| {
             let options = policies[&cell.id];
             let mut content = CellContent::source_only();

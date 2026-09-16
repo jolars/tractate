@@ -3,14 +3,17 @@
 //! Inspection and subsequent compiler passes consume the source semantic IR.
 
 use crate::document::{
-    Block, BlockKind, DocumentInspection, DocumentSummary, InlineKind, ScalarStyle, SemanticIds,
-    Slide, SlideKind, SourceDocument, SourceFile, SourcePresentation, YamlKind, YamlValue,
+    Block, BlockKind, DocumentInspection, DocumentSummary, InlineKind, Presentation, ScalarStyle,
+    SemanticIds, Slide, SlideKind, SourceDocument, SourceFile, SourcePresentation, YamlKind,
+    YamlValue,
 };
-use crate::parser;
 
 mod presentation;
+mod state;
 pub(crate) mod static_html;
 mod validation;
+
+pub use state::{Compiler, CompilerSnapshot, SourceRevision};
 
 /// Policy for a one-shot render, independent of cell evaluation options.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -29,7 +32,11 @@ pub struct RenderOptions {
 /// code cells.
 #[must_use]
 pub fn summarize_document(source: &str) -> DocumentSummary {
-    summarize_lowered(parser::lower(SourceFile::anonymous(source)))
+    Compiler::new(SourceFile::anonymous(source))
+        .snapshot()
+        .inspection()
+        .summary
+        .clone()
 }
 
 /// Inspect syntax, option declarations, and document-scoped labels without executing code.
@@ -39,20 +46,13 @@ pub fn summarize_document(source: &str) -> DocumentSummary {
 /// the supplied source snapshot; ranges use UTF-8 byte offsets.
 #[must_use]
 pub fn inspect_document(source: &str) -> DocumentInspection {
-    let lowered = parser::lower(SourceFile::anonymous(source));
-    let mut diagnostics = lowered.diagnostics.clone();
-    if lowered.error_count() == 0 {
-        diagnostics.extend(validation::validate(&lowered.document));
-    }
-    DocumentInspection {
-        summary: summarize_lowered(lowered),
-        diagnostics,
-    }
+    Compiler::new(SourceFile::anonymous(source))
+        .snapshot()
+        .inspection()
+        .clone()
 }
 
-fn summarize_lowered(lowered: parser::LoweredSource) -> DocumentSummary {
-    let parse_errors = lowered.error_count();
-    let presentation = presentation::lower_presentation(build_presentation(lowered.document));
+fn summarize_presentation(presentation: &Presentation, parse_errors: usize) -> DocumentSummary {
     let mut headings = 0;
     let mut code_blocks = 0;
     let mut executable_cells = 0;

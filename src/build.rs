@@ -5,7 +5,7 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use crate::compiler::{RenderOptions, static_html};
+use crate::compiler::{Compiler, RenderOptions, static_html};
 use crate::document::{Diagnostic, DiagnosticCode, SourceFile};
 use crate::render::html::{HtmlAsset, HtmlDirectory};
 
@@ -65,8 +65,9 @@ pub fn render_html_with_options(
     options: RenderOptions,
 ) -> Result<(), RenderError> {
     let text = fs::read_to_string(source).map_err(|error| io_error(source, error))?;
-    let compiled = static_html::compile(SourceFile::new(source, text), options)
-        .map_err(RenderError::Diagnostics)?;
+    let compiler = Compiler::new(SourceFile::new(source, text));
+    let compiled =
+        static_html::compile(&compiler.snapshot(), options).map_err(RenderError::Diagnostics)?;
     let root = source.parent().unwrap_or(Path::new("."));
     let mut bytes = Vec::new();
     for resource in &compiled.resources {

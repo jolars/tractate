@@ -22,6 +22,27 @@ and column locations and exits unsuccessfully on syntax or semantic errors.
 Inspection checks document-wide label uniqueness, label values, option names and
 scopes, and unsupported option syntax.
 
+Library callers can keep a `Compiler` across edits and retain immutable
+snapshots:
+
+```rust
+use tractate::{Compiler, SourceFile};
+
+let mut compiler = Compiler::new(SourceFile::new("slides.qmd", "## First\n"));
+let original = compiler.snapshot();
+compiler.update_source(SourceFile::new("slides.qmd", "## Revised\n"));
+assert!(compiler.revision() > original.revision());
+assert_eq!(original.source().text(), "## First\n");
+```
+
+Each compiler starts at source revision zero. Changes to the supplied path or
+source bytes advance the revision, including invalid edits and reversions.
+Identical input keeps the existing snapshot. Snapshots share their presentation
+tree and inspection diagnostics, and remain valid after later updates. These
+operations perform no filesystem access or execution. Changed input currently
+rebuilds the complete tree; dependency tracking and reuse across edits remain
+roadmap items.
+
 Render a source-only presentation with:
 
 ```console
