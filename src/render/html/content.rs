@@ -1,11 +1,14 @@
 //! Pure Markdown rendering. Cell policy and validated output are caller inputs.
 
+#[cfg(test)]
 use std::collections::HashMap;
 use std::fmt::Write;
 
 use crate::document::*;
 
-use super::{RenderedSlide, render_sections};
+use super::{RenderedSlide, render_section};
+
+pub(crate) type ReferenceTarget = (Option<String>, Option<String>);
 
 /// Already resolved presentation policy and HTML from validated result lookup.
 /// Suppressed cells use `show_source: false` and an empty result body. Supplying
@@ -43,7 +46,8 @@ pub(crate) fn render_presentation(
 }
 
 /// Resolve only destinations actually emitted, including document-wide references.
-pub(crate) fn render_with_resources(
+#[cfg(test)]
+fn render_with_resources(
     presentation: &Presentation,
     mut cell_content: impl FnMut(&PresentedCell) -> Result<CellContent, Diagnostic>,
     mut resource: impl FnMut(&str, &Origin) -> Result<String, Diagnostic>,
@@ -56,34 +60,54 @@ pub(crate) fn render_with_resources(
                 .or_insert_with(|| (reference.destination.clone(), reference.title.clone()));
         }
     });
+    presentation
+        .slides
+        .iter()
+        .map(|slide| {
+            render_slide(
+                slide,
+                &mut cell_content,
+                |label| references.get(label).cloned(),
+                &mut resource,
+            )
+        })
+        .collect()
+}
+
+/// Render a fragment using only its slide and explicit lookup callbacks.
+pub(crate) fn render_slide(
+    slide: &Slide,
+    mut cell_content: impl FnMut(&PresentedCell) -> Result<CellContent, Diagnostic>,
+    mut reference: impl FnMut(&str) -> Option<ReferenceTarget>,
+    mut resource: impl FnMut(&str, &Origin) -> Result<String, Diagnostic>,
+) -> Result<RenderedSlide, Diagnostic> {
     let mut renderer = Renderer {
-        references,
+        reference: &mut reference,
         cell_content: &mut cell_content,
         resource: &mut resource,
     };
-    render_sections(presentation, |slide| {
-        let mut html = String::new();
-        match &slide.kind {
-            SlideKind::Title(title) => {
-                html.push_str("<h1>");
-                escape(&title_text(title)?, &mut html);
-                html.push_str("</h1>\n");
-            }
-            SlideKind::Content(blocks) => renderer.blocks(blocks, &mut html)?,
+    let mut html = String::new();
+    match &slide.kind {
+        SlideKind::Title(title) => {
+            html.push_str("<h1>");
+            escape(&title_text(title)?, &mut html);
+            html.push_str("</h1>\n");
         }
-        Ok(html)
-    })
+        SlideKind::Content(blocks) => renderer.blocks(blocks, &mut html)?,
+    }
+    Ok(render_section(slide, html))
 }
 
-struct Renderer<'a, F, R> {
-    references: HashMap<String, (Option<String>, Option<String>)>,
+struct Renderer<'a, F, L, R> {
+    reference: &'a mut L,
     cell_content: &'a mut F,
     resource: &'a mut R,
 }
 
-impl<F, R> Renderer<'_, F, R>
+impl<F, L, R> Renderer<'_, F, L, R>
 where
     F: FnMut(&PresentedCell) -> Result<CellContent, Diagnostic>,
+    L: FnMut(&str) -> Option<ReferenceTarget>,
     R: FnMut(&str, &Origin) -> Result<String, Diagnostic>,
 {
     fn blocks(
@@ -272,15 +296,15 @@ where
                     let reference = link
                         .reference
                         .as_ref()
-                        .and_then(|label| self.references.get(label));
+                        .and_then(|label| (self.reference)(label));
                     let destination = link
                         .destination
                         .as_ref()
-                        .or_else(|| reference.and_then(|r| r.0.as_ref()));
+                        .or_else(|| reference.as_ref().and_then(|r| r.0.as_ref()));
                     let title = link
                         .title
                         .as_ref()
-                        .or_else(|| reference.and_then(|r| r.1.as_ref()));
+                        .or_else(|| reference.as_ref().and_then(|r| r.1.as_ref()));
                     let Some(destination) = destination else {
                         escape(link.origin.source_span().text(), html);
                         continue;

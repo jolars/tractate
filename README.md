@@ -39,9 +39,11 @@ Each compiler starts at source revision zero. Changes to the supplied path or
 source bytes advance the revision, including invalid edits and reversions.
 Identical input keeps the existing snapshot. Snapshots share their presentation
 tree and inspection diagnostics, and remain valid after later updates. These
-operations perform no filesystem access or execution. Changed input currently
-rebuilds the complete tree; dependency tracking and reuse across edits remain
-roadmap items.
+operations perform no filesystem access or execution. An internal graph tracks
+dependencies through semantic blocks, slides, and HTML fragments, including
+reference lookups and cell display policies. HTML preparation is lazy and shared
+within each snapshot. Changed input currently rebuilds the complete tree and
+graph; identity matching and reuse across edits remain roadmap items.
 
 Render a source-only presentation with:
 

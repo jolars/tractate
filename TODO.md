@@ -109,7 +109,7 @@ introduced.
 
 - [x] Introduce monotonically increasing source revisions and a long-lived
   in-memory compiler state.
-- [ ] Track dependencies from source through semantic blocks, slides, and
+- [x] Track dependencies from source through semantic blocks, slides, and
   rendered slide fragments; keep effects out of tracked queries.
 - [ ] Reuse stable semantic nodes and rendered fragments across revisions when
   their declared inputs are unchanged.

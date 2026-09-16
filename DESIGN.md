@@ -644,10 +644,35 @@ diagnostics. Callers may retain previous snapshots, whose origins continue to
 resolve against their original source. The compiler itself retains only the
 current snapshot, allowing unused revisions to be released. The one-shot
 inspection and render entry points create a compiler, and HTML preparation
-consumes its stored presentation and diagnostics. Each changed input currently
-rebuilds the full presentation. Tracking dependencies, matching semantic
-identities, reusing fragments across edits, and reporting slide changes remain
-subsequent work.
+consumes its stored presentation and diagnostics.
+
+Each snapshot owns an internal dependency graph. A combined Panache parsing and
+source-lowering query reads the supplied source. Semantic block projections
+retain their dependency on that document and on nested blocks. Slide queries
+read the grouping result, their semantic blocks, and title metadata when
+applicable. Graph keys use typed semantic handles within the snapshot, not byte
+offsets or rendered content.
+
+HTML preparation records separate queries for document display defaults, cell
+policies, reference lookups, the deck title, and individual slide fragments.
+Fragments read only their slide and the policies and references they actually
+use. Reference lookups depend on the document reference index and the winning
+definition. Local resource destinations are resolved independently within each
+fragment; deck assembly merges the resulting resource requirements. Inspection
+and required-result checks gate deck assembly without becoming unconditional
+inputs to every fragment.
+
+Queries retain their reads even when they return diagnostics. Each snapshot
+lazily memoizes HTML preparation, including failures, separately for normal
+rendering and `no_execute`. Snapshot clones share these outcomes. Resource file
+reads, process execution, and directory publication remain outside the graph in
+the effectful build layer; resource bytes are not inputs to HTML fragments at
+this stage.
+
+Each changed source currently rebuilds the presentation and graph. Matching
+semantic identities, reusing nodes and fragments across revisions, and reporting
+slide changes remain subsequent work. The graph records dependencies now; it
+does not yet skip queries after an edit.
 
 Conceptually:
 

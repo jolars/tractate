@@ -2,10 +2,13 @@
 
 use std::fmt;
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
-use crate::document::{DocumentInspection, Presentation, SourceFile};
+use crate::document::{DocumentInspection, Presentation, SlideKind, SourceFile};
 use crate::parser;
+
+use super::queries::{DependencyGraph, QueryKey};
+use super::{RenderOptions, static_html};
 
 #[cfg(test)]
 mod tests;
@@ -35,9 +38,10 @@ impl fmt::Display for SourceRevision {
 /// Long-lived, in-memory compilation state for one QMD or Markdown document.
 ///
 /// Construction and updates parse, lower, and validate the supplied source
-/// without filesystem access or execution. Each changed input currently rebuilds
-/// the complete presentation; dependency tracking and reuse across edits are
-/// separate compiler work. Only the current snapshot is retained internally.
+/// without filesystem access or execution. Snapshots track pure dependencies
+/// through semantic blocks, slides, and lazily prepared HTML fragments. Each
+/// changed input currently rebuilds the complete presentation; reuse across edits
+/// is separate compiler work. Only the current snapshot is retained internally.
 ///
 /// ```
 /// use tractate::{Compiler, SourceFile};
@@ -116,27 +120,77 @@ struct SnapshotData {
     source: SourceFile,
     presentation: Presentation,
     inspection: DocumentInspection,
+    dependencies: DependencyGraph,
+    html: [OnceLock<static_html::HtmlCompilation>; 2],
 }
 
 impl CompilerSnapshot {
     fn new(source: SourceFile, revision: SourceRevision) -> Self {
-        let lowered = parser::lower(source.clone());
+        let mut dependencies = DependencyGraph::default();
+        dependencies.query(QueryKey::Source, |_| ());
+        let lowered = dependencies.query(QueryKey::SourceDocument, |reads| {
+            parser::lower(reads.read(QueryKey::Source, source.clone()))
+        });
+        dependencies.query(QueryKey::Metadata, |reads| {
+            reads.read(QueryKey::SourceDocument, &lowered.document.metadata)
+        });
+        lowered.document.visit_blocks(&mut |block| {
+            dependencies.query(QueryKey::SemanticBlock(block.id), |reads| {
+                let block = reads.read(QueryKey::SourceDocument, block);
+                block.visit(
+                    &mut |child| {
+                        if child.id != block.id {
+                            reads.read(QueryKey::SemanticBlock(child.id), child);
+                        }
+                    },
+                    &mut |_| {},
+                );
+                block
+            });
+        });
         let parse_errors = lowered.error_count();
-        let mut diagnostics = lowered.diagnostics;
+        let inspection_reads = super::queries::Reads::default();
+        let mut diagnostics = inspection_reads.read(QueryKey::SourceDocument, lowered.diagnostics);
         if parse_errors == 0 {
-            diagnostics.extend(super::validation::validate(&lowered.document));
+            diagnostics.extend(super::validation::validate(
+                inspection_reads.read(QueryKey::SourceDocument, &lowered.document),
+            ));
         }
-        let presentation =
-            super::presentation::lower_presentation(super::build_presentation(lowered.document));
+        let grouped = dependencies.query(QueryKey::SlideLayout, |reads| {
+            super::build_presentation(reads.read(QueryKey::SourceDocument, lowered.document))
+        });
+        let presentation = super::presentation::lower_presentation_with(grouped, |slide| {
+            dependencies.query(QueryKey::Slide(slide.id), |reads| {
+                let slide = reads.read(QueryKey::SlideLayout, slide);
+                match &slide.kind {
+                    SlideKind::Title(title) => {
+                        reads.read(QueryKey::Metadata, title);
+                    }
+                    SlideKind::Content(blocks) => {
+                        for block in blocks {
+                            reads.read(QueryKey::SemanticBlock(block.id), block);
+                        }
+                    }
+                }
+                super::presentation::lower_slide(slide)
+            })
+        });
+        inspection_reads.read(QueryKey::SlideLayout, &presentation);
+        for slide in &presentation.slides {
+            inspection_reads.read(QueryKey::Slide(slide.id), slide);
+        }
         let inspection = DocumentInspection {
             summary: super::summarize_presentation(&presentation, parse_errors),
             diagnostics,
         };
+        dependencies.finish(QueryKey::Inspection, inspection_reads);
         Self(Arc::new(SnapshotData {
             revision,
             source,
             presentation,
             inspection,
+            dependencies,
+            html: Default::default(),
         }))
     }
 
@@ -158,5 +212,14 @@ impl CompilerSnapshot {
 
     pub(super) fn presentation(&self) -> &Presentation {
         &self.0.presentation
+    }
+
+    pub(super) fn dependencies(&self) -> &DependencyGraph {
+        &self.0.dependencies
+    }
+
+    pub(super) fn html(&self, options: RenderOptions) -> &static_html::HtmlCompilation {
+        self.0.html[usize::from(options.no_execute)]
+            .get_or_init(|| static_html::prepare(self, options))
     }
 }

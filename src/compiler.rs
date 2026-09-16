@@ -9,6 +9,7 @@ use crate::document::{
 };
 
 mod presentation;
+mod queries;
 mod state;
 pub(crate) mod static_html;
 mod validation;
@@ -16,7 +17,7 @@ mod validation;
 pub use state::{Compiler, CompilerSnapshot, SourceRevision};
 
 /// Policy for a one-shot render, independent of cell evaluation options.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct RenderOptions {
     /// Forbid execution and require every enabled cell's result to be available.
     ///

@@ -2,6 +2,8 @@ use super::*;
 use crate::compiler::{RenderOptions, static_html};
 use crate::document::{DiagnosticCode, SourceRange};
 
+mod dependencies;
+
 #[test]
 fn compiler_state_revision_exhaustion_preserves_the_current_snapshot() {
     let mut compiler = Compiler {

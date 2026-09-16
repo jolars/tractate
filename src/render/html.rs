@@ -1,12 +1,14 @@
 //! Reveal sections and Markdown content, independent of cell execution.
 
-use crate::document::{Origin, Presentation, Slide, SlideId};
+#[cfg(test)]
+use crate::document::Presentation;
+use crate::document::{Origin, Slide, SlideId};
 
 mod content;
 mod directory;
 #[cfg(test)]
 pub(crate) use content::render_presentation;
-pub(crate) use content::{CellContent, render_with_resources, title_text};
+pub(crate) use content::{CellContent, ReferenceTarget, render_slide, title_text};
 pub(crate) use directory::{HtmlAsset, HtmlDirectory};
 
 /// One independently replaceable Reveal section and its semantic provenance.
@@ -29,6 +31,7 @@ pub(crate) struct RenderedSlide {
 /// of position, heading text, source offsets, and body bytes. The compiler must
 /// retain semantic IDs across revisions; this backend does not match slides.
 /// These identifiers are local to a compilation scope, not persistent cache keys.
+#[cfg(test)]
 pub(crate) fn render_sections<E>(
     presentation: &Presentation,
     mut render_body: impl FnMut(&Slide) -> Result<String, E>,
@@ -36,16 +39,17 @@ pub(crate) fn render_sections<E>(
     presentation
         .slides
         .iter()
-        .map(|slide| {
-            let body = render_body(slide)?;
-            Ok(RenderedSlide {
-                id: slide.id,
-                origin: slide.origin.derived("html-section"),
-                html: format!(
-                    "<section data-slide-id=\"slide-{}\">\n{body}</section>\n",
-                    slide.id
-                ),
-            })
-        })
+        .map(|slide| Ok(render_section(slide, render_body(slide)?)))
         .collect()
+}
+
+fn render_section(slide: &Slide, body: String) -> RenderedSlide {
+    RenderedSlide {
+        id: slide.id,
+        origin: slide.origin.derived("html-section"),
+        html: format!(
+            "<section data-slide-id=\"slide-{}\">\n{body}</section>\n",
+            slide.id
+        ),
+    }
 }
