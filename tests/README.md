@@ -35,6 +35,15 @@ session prefixes. Disabled-cell edits preserve the enabled plan; re-enabling a
 cell restores its place in the stateful chain. Render options and missing files
 do not affect planning. Invalid options retain their QMD origins. Incremental
 edits, errors, and repair match clean plans with LF and CRLF source.
+
+`evaluation_schedule.rs` checks independent isolated cells and language and
+session chains under a global concurrency limit, document-order reservations,
+out-of-order completions, and failure or cancellation confined to a session's
+suffix. A blocked worker proves that an unrelated session and isolated cells
+continue without waiting for it. Empty and disabled plans finish immediately.
+Invalid plans constructed by callers and progress updates are rejected without
+releasing slots or advancing successors.
+
 `slide_changes.rs` checks the public slide difference API across insertion,
 deletion, reordering combined with modification, title and boundary edits,
 identical updates, path changes, repeated boundaries, source gaps, invalid

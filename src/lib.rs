@@ -9,9 +9,9 @@ mod render;
 
 pub use build::{RenderError, render_html, render_html_with_options};
 pub use compiler::{
-    Compiler, CompilerSnapshot, EvaluationPlan, EvaluationSession, PlannedCell, RenderOptions,
-    SlideChangeSet, SlideMove, SlidePosition, SourceRevision, SourceUpdate, inspect_document,
-    summarize_document,
+    Compiler, CompilerSnapshot, EvaluationPlan, EvaluationSchedule, EvaluationScheduleError,
+    EvaluationSession, PlannedCell, RenderOptions, ScheduledCellState, SlideChangeSet, SlideMove,
+    SlidePosition, SourceRevision, SourceUpdate, inspect_document, summarize_document,
 };
 pub use document::{
     CellId, Derivation, Diagnostic, DiagnosticCode, DocumentInspection, DocumentSummary,

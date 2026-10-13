@@ -8,6 +8,10 @@ use super::SourceRevision;
 use super::options::{boolean, execute_mappings};
 use super::queries::{DependencyGraph, QueryKey, Reads};
 
+mod schedule;
+
+pub use schedule::{EvaluationSchedule, EvaluationScheduleError, ScheduledCellState};
+
 /// Desired computations in semantic document order at one source revision.
 ///
 /// Only cells with effective `eval: true` appear here. Constructing or reading

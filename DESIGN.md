@@ -1060,6 +1060,23 @@ predecessor chain, so editing their code contributes no cumulative state.
 Re-enabling a cell restores its position in the chain. Rendering options do not
 affect planning; disabled cells remain in the presentation for source display.
 
+`EvaluationPlan::schedule(max_concurrent)` prepares an `EvaluationSchedule` with
+a positive global concurrency limit. `reserve_next()` reserves the earliest
+ready cell in document order and occupies a slot until `complete()` reports its
+accepted terminal outcome. Each isolated cell is ready independently. Default
+and named session heads are also ready independently, with separate chains per
+language. Success immediately releases that chain's next cell, so a slow session
+does not hold unrelated work at a batch boundary. Failure or cancellation blocks
+only the affected session's remaining suffix. A limit of one serializes the
+plan. The schedule rejects duplicate cell IDs and predecessor links that do not
+match the conservative stateful chains.
+
+This schedule only tracks structural progress in memory. Reserving a cell does
+not start a runner or authorize execution. The effectful coordinator must
+validate revision, attempt, execution key, and predecessor state before
+reporting a completion. Revision reconciliation, retries, and result publication
+remain part of the later scheduler work.
+
 The current plan records structural state dependencies. It does not compute
 execution or cumulative state keys, consult cached results, materialize
 interpreter state, authorize execution, or perform I/O. Those contracts remain

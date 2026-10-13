@@ -55,8 +55,15 @@ local overrides, including validation of overridden defaults. It retains enabled
 cells in source order with their IDs, QMD origins, languages, and executable
 code. Disabled cells contribute no computation or state. Each stateful cell
 names the preceding enabled cell in its language and default or named session;
-isolated cells have no predecessor. Execution keys, scheduling, and interpreter
-state remain later stages.
+isolated cells have no predecessor.
+
+Use `plan.schedule(max_concurrent)` with a `NonZeroUsize` limit to reserve ready
+cells across independent sessions and isolated cells. `reserve_next()` selects
+ready cells in document order within the global limit. Report accepted outcomes
+with `complete()` to release slots and advance successful session chains.
+Failures and cancellations block only their own session suffix. This queue
+tracks progress in memory without starting runners. Execution keys, interpreter
+state, and revision-safe dispatch remain later stages.
 
 Render a source-only presentation with:
 

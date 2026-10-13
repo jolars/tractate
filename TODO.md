@@ -152,7 +152,7 @@ This stage establishes the effect boundary and race safety without depending on 
 - [x] Exclude `eval: false` cells from execution and from cumulative state.
 - [x] Build conservative document-order chains for the default and named
   stateful sessions.
-- [ ] Plan isolated cells independently and allow unrelated sessions to make
+- [x] Plan isolated cells independently and allow unrelated sessions to make
   progress concurrently within a configurable limit.
 - [ ] Compute cumulative state keys and distinguish a logically cached result
   from interpreter state that has actually been materialized.

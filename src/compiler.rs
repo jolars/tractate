@@ -19,7 +19,10 @@ pub(crate) mod static_html;
 mod validation;
 
 pub use changes::{SlideChangeSet, SlideMove, SlidePosition, SourceUpdate};
-pub use evaluation::{EvaluationPlan, EvaluationSession, PlannedCell};
+pub use evaluation::{
+    EvaluationPlan, EvaluationSchedule, EvaluationScheduleError, EvaluationSession, PlannedCell,
+    ScheduledCellState,
+};
 pub use state::{Compiler, CompilerSnapshot, SourceRevision};
 
 /// Policy for a one-shot render, independent of cell evaluation options.
