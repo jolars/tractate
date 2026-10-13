@@ -73,7 +73,7 @@ pub fn render_html_with_options(
     for resource in &compiled.resources {
         let path = root.join(&resource.source);
         bytes.push(fs::read(&path).map_err(|error| {
-            RenderError::Diagnostics(vec![static_html::error(
+            RenderError::Diagnostics(vec![crate::document::error(
                 DiagnosticCode::ResourceUnavailable,
                 &resource.origin,
                 format!(

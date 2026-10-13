@@ -29,6 +29,12 @@ retained state can use the same assertion helper.
 path changes, identical updates, reversions, invalid input, and repair. It
 checks revision ordering, retained source origins and diagnostics, absence of
 filesystem access, and inspection equivalence with clean builds.
+`evaluation_plan.rs` checks pure computation lowering through nested containers,
+YAML Boolean defaults and overrides, session names, and independent language and
+session prefixes. Disabled-cell edits preserve the enabled plan; re-enabling a
+cell restores its place in the stateful chain. Render options and missing files
+do not affect planning. Invalid options retain their QMD origins. Incremental
+edits, errors, and repair match clean plans with LF and CRLF source.
 `slide_changes.rs` checks the public slide difference API across insertion,
 deletion, reordering combined with modification, title and boundary edits,
 identical updates, path changes, repeated boundaries, source gaps, invalid
@@ -43,12 +49,13 @@ compared with clean builds after each edit in both execution modes.
 with direct parsing and lowering that bypass semantic-template reuse. It
 canonicalizes compiler-scoped handles within each semantic subtree while
 preserving origins and result-slot relationships. Fresh compilers supply the
-inspection and HTML oracle in both execution modes, including complete render
-diagnostics and resource origins. Every QMD fixture undergoes insertion, prose
-edits, movement, deletion, and restoration with LF and CRLF input. Additional
-sequences edit references, inherited defaults, local overrides, titles, labels,
-execution requirements, invalid options, and paths. A negative control confirms
-that stale semantic output fails the oracle.
+inspection, evaluation-plan, and HTML oracle in both execution modes, including
+complete diagnostics and origins. Evaluation plans preserve session and
+predecessor relationships after canonicalizing cell handles. Every QMD fixture
+undergoes insertion, prose edits, movement, deletion, and restoration with LF
+and CRLF input. Additional sequences edit references, inherited defaults, local
+overrides, titles, labels, execution requirements, invalid options, and paths. A
+negative control confirms that stale semantic output fails the oracle.
 
 `src/compiler/state/tests/reuse.rs` verifies shared semantic-template and HTML
 allocations across prose edits, slide moves, insertions, removals, and repeated

@@ -9,6 +9,8 @@ use crate::document::{
 };
 
 mod changes;
+mod evaluation;
+mod options;
 mod presentation;
 mod queries;
 mod reuse;
@@ -17,6 +19,7 @@ pub(crate) mod static_html;
 mod validation;
 
 pub use changes::{SlideChangeSet, SlideMove, SlidePosition, SourceUpdate};
+pub use evaluation::{EvaluationPlan, EvaluationSession, PlannedCell};
 pub use state::{Compiler, CompilerSnapshot, SourceRevision};
 
 /// Policy for a one-shot render, independent of cell evaluation options.

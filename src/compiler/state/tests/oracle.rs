@@ -44,6 +44,18 @@ fn canonical(mut presentation: Presentation) -> Presentation {
     presentation
 }
 
+fn canonical_plan(plan: &crate::EvaluationPlan) -> Vec<crate::PlannedCell> {
+    let mut map = CanonicalIds::default();
+    let mut cells = plan.cells.clone();
+    for cell in &mut cells {
+        map.cell(&mut cell.cell_id);
+        if let Some(predecessor) = &mut cell.predecessor {
+            map.cell(predecessor);
+        }
+    }
+    cells
+}
+
 fn assert_full_build(snapshot: &CompilerSnapshot, context: &str) {
     // Bypass semantic-template reuse entirely for the semantic oracle.
     let lowered = parser::lower(snapshot.source().clone());
@@ -61,6 +73,19 @@ fn assert_full_build(snapshot: &CompilerSnapshot, context: &str) {
         fresh.inspection(),
         "{context}: inspection"
     );
+    match (snapshot.evaluation_plan(), fresh.evaluation_plan()) {
+        (Ok(actual), Ok(expected)) => {
+            assert_eq!(actual.source_revision, snapshot.revision());
+            assert_eq!(expected.source_revision, fresh.revision());
+            assert_eq!(
+                canonical_plan(actual),
+                canonical_plan(expected),
+                "{context}: evaluation plan"
+            );
+        }
+        (Err(actual), Err(expected)) => assert_eq!(actual, expected, "{context}: plan diagnostics"),
+        results => panic!("{context}: inconsistent planning outcome: {results:?}"),
+    }
     for no_execute in [false, true] {
         let options = RenderOptions { no_execute };
         assert_eq!(

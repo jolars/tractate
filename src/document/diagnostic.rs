@@ -71,3 +71,17 @@ pub struct RelatedOrigin {
     pub message: String,
     pub origin: Origin,
 }
+
+pub(crate) fn error(
+    code: DiagnosticCode,
+    origin: &Origin,
+    message: impl Into<String>,
+) -> Diagnostic {
+    Diagnostic {
+        severity: Severity::Error,
+        code,
+        message: message.into(),
+        primary: origin.clone(),
+        related: Vec::new(),
+    }
+}

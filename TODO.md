@@ -148,9 +148,9 @@ This stage establishes the effect boundary and race safety without depending on 
 
 ### 2.2 Plan computation
 
-- [ ] Lower executable cells into an evaluation plan independently of rendering.
-- [ ] Exclude `eval: false` cells from execution and from cumulative state.
-- [ ] Build conservative document-order chains for the default and named
+- [x] Lower executable cells into an evaluation plan independently of rendering.
+- [x] Exclude `eval: false` cells from execution and from cumulative state.
+- [x] Build conservative document-order chains for the default and named
   stateful sessions.
 - [ ] Plan isolated cells independently and allow unrelated sessions to make
   progress concurrently within a configurable limit.

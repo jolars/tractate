@@ -4,12 +4,14 @@ use std::fmt;
 use std::path::Path;
 use std::sync::{Arc, Mutex, OnceLock};
 
-use crate::document::{DocumentInspection, Presentation, SemanticIds, SlideKind, SourceFile};
+use crate::document::{
+    Diagnostic, DocumentInspection, Presentation, SemanticIds, SlideKind, SourceFile,
+};
 use crate::parser;
 
 use super::changes::{SlideChangeSet, SourceUpdate};
 use super::queries::{DependencyGraph, QueryKey};
-use super::{RenderOptions, static_html};
+use super::{EvaluationPlan, RenderOptions, static_html};
 
 #[cfg(test)]
 mod tests;
@@ -134,8 +136,8 @@ impl Compiler {
 
 /// An immutable compilation at a specific source revision.
 ///
-/// Clones share source, presentation, and diagnostics. Origins always resolve
-/// against this snapshot's source, even after the owning compiler advances.
+/// Clones share source, presentation, evaluation plan, and diagnostics. Origins
+/// always resolve against this snapshot's source, even after the compiler advances.
 #[derive(Debug, Clone)]
 pub struct CompilerSnapshot(Arc<SnapshotData>);
 
@@ -145,6 +147,7 @@ struct SnapshotData {
     source: SourceFile,
     presentation: Presentation,
     inspection: DocumentInspection,
+    evaluation_plan: Result<EvaluationPlan, Vec<Diagnostic>>,
     dependencies: DependencyGraph,
     html: [OnceLock<static_html::HtmlCompilation>; 2],
     next_id: u64,
@@ -191,12 +194,17 @@ impl CompilerSnapshot {
         });
         let parse_errors = lowered.error_count();
         let inspection_reads = super::queries::Reads::default();
-        let mut diagnostics = inspection_reads.read(QueryKey::SourceDocument, lowered.diagnostics);
-        if parse_errors == 0 {
-            diagnostics.extend(super::validation::validate(
-                inspection_reads.read(QueryKey::SourceDocument, &lowered.document),
-            ));
-        }
+        let diagnostics = dependencies.query(QueryKey::SourceDiagnostics, |reads| {
+            let mut diagnostics = reads.read(QueryKey::SourceDocument, lowered.diagnostics);
+            if parse_errors == 0 {
+                diagnostics.extend(super::validation::validate(
+                    reads.read(QueryKey::SourceDocument, &lowered.document),
+                ));
+            }
+            diagnostics
+        });
+        let evaluation_plan =
+            super::evaluation::lower(&lowered.document, revision, &diagnostics, &mut dependencies);
         let mut grouped = dependencies.query(QueryKey::SlideLayout, |reads| {
             super::build_presentation(reads.read(QueryKey::SourceDocument, lowered.document))
         });
@@ -251,7 +259,7 @@ impl CompilerSnapshot {
         }
         let inspection = DocumentInspection {
             summary: super::summarize_presentation(&presentation, parse_errors),
-            diagnostics,
+            diagnostics: inspection_reads.read(QueryKey::SourceDiagnostics, diagnostics),
         };
         dependencies.finish(QueryKey::Inspection, inspection_reads);
         let fragments = previous.map_or_else(Default::default, |previous| {
@@ -266,6 +274,7 @@ impl CompilerSnapshot {
             source,
             presentation,
             inspection,
+            evaluation_plan,
             dependencies,
             html: Default::default(),
             next_id: ids.next(),
@@ -289,6 +298,29 @@ impl CompilerSnapshot {
     #[must_use]
     pub fn inspection(&self) -> &DocumentInspection {
         &self.0.inspection
+    }
+
+    /// Read desired computations without rendering, accessing files, or executing.
+    ///
+    /// Syntax and declaration errors prevent planning. Evaluation defaults and
+    /// local options are validated even when an override or `eval: false` would
+    /// hide them. Disabled cells retain their source presentation but contribute
+    /// neither a planned computation nor a session predecessor.
+    ///
+    /// ```
+    /// use tractate::{Compiler, SourceFile};
+    ///
+    /// let compiler = Compiler::new(SourceFile::anonymous(
+    ///     "```{r}\nx <- 1\n```\n\n```{r}\n#| eval: false\nx <- 2\n```\n\n```{r}\nprint(x)\n```\n",
+    /// ));
+    /// let snapshot = compiler.snapshot();
+    /// let plan = snapshot.evaluation_plan().unwrap();
+    /// assert_eq!(plan.source_revision, snapshot.revision());
+    /// assert_eq!(plan.cells.len(), 2);
+    /// assert_eq!(plan.cells[1].predecessor, Some(plan.cells[0].cell_id));
+    /// ```
+    pub fn evaluation_plan(&self) -> Result<&EvaluationPlan, &[Diagnostic]> {
+        self.0.evaluation_plan.as_ref().map_err(Vec::as_slice)
     }
 
     /// Slide handles in presentation order, scoped to this compiler instance.

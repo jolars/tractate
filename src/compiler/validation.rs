@@ -176,7 +176,7 @@ impl Validator {
                         && entry.key.properties.is_empty()
                         && entry.value.properties.is_empty() =>
                 {
-                    if let Some(label) = label(&entry.value) {
+                    if let Some(label) = name(&entry.value) {
                         self.labels.push((label, entry.value.origin.clone()));
                     } else if !matches!(entry.value.kind, YamlKind::Unsupported(_)) {
                         self.error(DiagnosticCode::InvalidLabel, &entry.value.origin, "`label` must be a nonempty string without whitespace or control characters");
@@ -239,7 +239,7 @@ fn scalar_text(value: &YamlValue) -> Option<&str> {
     }
 }
 
-fn label(value: &YamlValue) -> Option<String> {
+pub(super) fn name(value: &YamlValue) -> Option<String> {
     let YamlKind::Scalar { text, style } = &value.kind else {
         return None;
     };
@@ -247,7 +247,7 @@ fn label(value: &YamlValue) -> Option<String> {
         return None;
     }
     let text = match style {
-        ScalarStyle::Literal | ScalarStyle::Folded => block_label(text, &value.origin)?,
+        ScalarStyle::Literal | ScalarStyle::Folded => block_name(text, &value.origin)?,
         _ => text.clone(),
     };
     (!text.is_empty() && !text.chars().any(|c| c.is_whitespace() || c.is_control())).then_some(text)
@@ -287,9 +287,9 @@ fn plain_non_string(text: &str) -> bool {
         || (text.bytes().any(|b| b.is_ascii_digit()) && text.parse::<f64>().is_ok())
 }
 
-/// A valid block label has one content line and strips its final line break.
+/// A valid block name has one content line and strips its final line break.
 /// Folding multiple nonempty lines would introduce forbidden whitespace.
-fn block_label(text: &str, origin: &Origin) -> Option<String> {
+fn block_name(text: &str, origin: &Origin) -> Option<String> {
     let mut lines = text.lines();
     let header = lines.next()?.split('#').next()?.trim();
     if !header.contains('-') {
@@ -298,14 +298,17 @@ fn block_label(text: &str, origin: &Origin) -> Option<String> {
     let first = lines.next()?;
     let indentation = header.bytes().find(|b| matches!(b, b'1'..=b'9'));
     let content_indent = if let Some(indentation) = indentation {
-        // Labels only occur in hashpipe mappings. Drop the host prefix before
-        // measuring the YAML parent indentation for an explicit indicator.
+        // Hashpipe declarations may have a Markdown container prefix. Measure
+        // explicit indentation relative to the YAML rather than its host.
         let span = origin.source_span();
         let prefix = span.file().text()[..span.range().start]
             .rsplit('\n')
             .next()?;
-        let yaml = prefix.split_once("#|")?.1;
-        let yaml = yaml.strip_prefix(' ').unwrap_or(yaml);
+        let yaml = if let Some((_, yaml)) = prefix.split_once("#|") {
+            yaml.strip_prefix(' ').unwrap_or(yaml)
+        } else {
+            prefix
+        };
         let parent_indent = yaml.bytes().take_while(|&b| b == b' ').count();
         parent_indent + usize::from(indentation - b'0')
     } else {

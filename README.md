@@ -49,6 +49,15 @@ the cell policies and references they read remain unchanged. Origins always
 resolve against the source for the requesting snapshot. Parsing and validation
 still run after every changed input.
 
+Read a snapshot's `evaluation_plan()` to inspect desired computation without
+rendering or execution. The plan resolves `eval` and `session` defaults and
+local overrides, including validation of overridden defaults. It retains enabled
+cells in source order with their IDs, QMD origins, languages, and executable
+code. Disabled cells contribute no computation or state. Each stateful cell
+names the preceding enabled cell in its language and default or named session;
+isolated cells have no predecessor. Execution keys, scheduling, and interpreter
+state remain later stages.
+
 Render a source-only presentation with:
 
 ```console

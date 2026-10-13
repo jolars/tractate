@@ -178,3 +178,63 @@ fn dependencies_memoize_success_and_failure_without_mixing_render_policies() {
     assert!(normal.result.is_err());
     success.dependencies.assert_complete();
 }
+
+#[test]
+fn dependencies_plan_source_cells_without_reading_presentation_or_html() {
+    let snapshot = Compiler::new(SourceFile::anonymous(
+        "---\nexecute:\n  eval: false\n---\n\n## Cells\n\n> ```{r}\n> #| eval: true\n> nested()\n> ```\n\n```{r}\ndisabled()\n```\n",
+    ))
+    .snapshot();
+    let plan = snapshot.evaluation_plan().unwrap();
+    assert_eq!(plan.cells.len(), 1);
+    assert!(snapshot.0.html.iter().all(|query| query.get().is_none()));
+    let graph = snapshot.dependencies();
+    for input in [
+        QueryKey::Source,
+        QueryKey::Metadata,
+        QueryKey::SourceDiagnostics,
+    ] {
+        assert!(graph.dependents(&input).contains(&QueryKey::EvaluationPlan));
+    }
+    for input in [QueryKey::SlideLayout, QueryKey::Inspection] {
+        assert!(!graph.dependents(&input).contains(&QueryKey::EvaluationPlan));
+    }
+    snapshot.presentation().visit_blocks(&mut |block| {
+        if let BlockKind::Cell(cell) = &block.kind {
+            let affected = graph.dependents(&QueryKey::SemanticBlock(block.id));
+            assert!(affected.contains(&QueryKey::CellEvaluation(cell.id)));
+            assert!(affected.contains(&QueryKey::EvaluationPlan));
+            if let Some(planned) = plan.cells.iter().find(|planned| planned.cell_id == cell.id) {
+                assert_eq!(planned.cell_id, cell.result.cell);
+                assert_eq!(planned.origin.source_span(), cell.origin.source_span());
+            }
+        }
+    });
+    graph.assert_complete();
+}
+
+#[test]
+fn dependencies_retain_source_and_option_reads_when_planning_fails() {
+    for source in [
+        "```{r}\n#| eval: 'false'\n1\n```\n",
+        "---\nexecute:\n  eval: 'false'\n---\n",
+        include_str!("../../../../tests/fixtures/malformed-options.qmd"),
+    ] {
+        let snapshot = Compiler::new(SourceFile::anonymous(source)).snapshot();
+        assert!(snapshot.evaluation_plan().is_err());
+        let graph = snapshot.dependencies();
+        assert!(
+            graph
+                .dependents(&QueryKey::SourceDiagnostics)
+                .contains(&QueryKey::EvaluationPlan)
+        );
+        if snapshot.inspection().summary.parse_errors == 0 {
+            assert!(
+                graph
+                    .dependents(&QueryKey::EvaluationDefaults)
+                    .contains(&QueryKey::EvaluationPlan)
+            );
+        }
+        graph.assert_complete();
+    }
+}

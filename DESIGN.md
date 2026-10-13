@@ -427,10 +427,11 @@ names, mixed input lists, and invalid dimensions. The library's syntax-only
 `inspect_document` and `tractate inspect` additionally validate label values and
 uniqueness, option names and scopes, and unsupported option syntax. Other option
 value types and effective default resolution remain subsequent compiler work,
-except that the static render path now validates and resolves `eval`, `echo`,
-and `include` as YAML Booleans. It checks overridden defaults, displays disabled
-cells according to their effective visibility, and rejects enabled cells until
-execution is implemented.
+except that the evaluation plan validates and resolves `eval` and `session`, and
+the static render path validates and resolves `eval`, `echo`, and `include` as
+YAML Booleans. Both check overridden defaults and share Boolean resolution.
+Static rendering displays disabled cells according to their effective visibility
+and rejects enabled cells until execution is implemented.
 
 The incremental compiler and fake-runner stages must turn the following edit
 cases into behavioral tests, each compared with a clean full build:
@@ -653,6 +654,13 @@ retain their dependency on that document and on nested blocks. Slide queries
 read the grouping result, their semantic blocks, and title metadata when
 applicable. Graph keys use typed semantic handles within the snapshot, not byte
 offsets or rendered content.
+
+Source diagnostics, evaluation defaults, cell evaluation policies, and the
+evaluation plan form a separate query path before slide grouping. Planning reads
+source semantics and metadata without depending on slide layout, presentation
+result slots, or an HTML query. Each snapshot retains its plan or planning
+diagnostics, so repeated reads share the same outcome and retained snapshots
+keep their original revision and origins.
 
 HTML preparation records separate queries for document display defaults, cell
 policies, reference lookups, the deck title, and individual slide fragments.
@@ -1032,6 +1040,30 @@ Cells in a stateful session are ordered by their semantic document order.
 Moving, inserting, or removing a cell changes the cumulative chain from that
 point onward. Different sessions have no implicit data dependencies, although
 their arbitrary filesystem side effects may still conflict.
+
+## Evaluation planning
+
+`CompilerSnapshot::evaluation_plan()` exposes the pure source-to-computation
+pass. It returns an `EvaluationPlan` with the source revision and enabled cells
+in semantic document order, including cells inside preserved Markdown
+containers. Each `PlannedCell` retains its semantic cell ID, QMD origin,
+language, executable source without option declarations or container prefixes,
+session selection, and preceding enabled cell in that language and stateful
+session. `EvaluationSession` distinguishes the default session, named sessions,
+and isolated cells without assigning runner or dispatch identities.
+
+Planning validates syntax and option declarations before resolving `eval` and
+`session`. Defaults are validated even without cells or when a local override
+hides them. Every cell's evaluation options are validated before evaluation
+policy excludes disabled cells. Disabled cells never appear in a plan or
+predecessor chain, so editing their code contributes no cumulative state.
+Re-enabling a cell restores its position in the chain. Rendering options do not
+affect planning; disabled cells remain in the presentation for source display.
+
+The current plan records structural state dependencies. It does not compute
+execution or cumulative state keys, consult cached results, materialize
+interpreter state, authorize execution, or perform I/O. Those contracts remain
+subsequent planning and scheduler work.
 
 ## Isolated cells
 

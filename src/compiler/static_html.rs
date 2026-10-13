@@ -2,6 +2,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use super::options::{boolean, execute_mappings};
 use super::queries::{DependencyGraph, QueryKey, Reads};
 use super::reuse::{SlideInput, slide_input};
 
@@ -387,12 +388,8 @@ impl Default for DisplayOptions {
 
 impl DisplayOptions {
     fn apply_metadata(&mut self, metadata: &Metadata, diagnostics: &mut Vec<Diagnostic>) {
-        if let Some(entries) = metadata.value.mapping() {
-            for entry in entries {
-                if matches!(&entry.key.kind, YamlKind::Scalar { text, .. } if text == "execute") {
-                    self.apply(&entry.value, diagnostics);
-                }
-            }
+        for mapping in execute_mappings(metadata) {
+            self.apply(mapping, diagnostics);
         }
     }
 
@@ -407,40 +404,9 @@ impl DisplayOptions {
                 "include" => &mut self.include,
                 _ => continue,
             };
-            let boolean = match &entry.value.kind {
-                YamlKind::Scalar {
-                    text,
-                    style: ScalarStyle::Plain,
-                } => match text.as_str() {
-                    "true" | "True" | "TRUE" => Some(true),
-                    "false" | "False" | "FALSE" => Some(false),
-                    _ => None,
-                },
-                _ => None,
-            };
-            if let Some(value) = boolean {
+            if let Some(value) = boolean(key, &entry.value, diagnostics) {
                 *target = value;
-            } else {
-                diagnostics.push(error(
-                    DiagnosticCode::InvalidOptionValue,
-                    &entry.value.origin,
-                    format!("`{key}` must be a YAML Boolean"),
-                ));
             }
         }
-    }
-}
-
-pub(crate) fn error(
-    code: DiagnosticCode,
-    origin: &Origin,
-    message: impl Into<String>,
-) -> Diagnostic {
-    Diagnostic {
-        severity: Severity::Error,
-        code,
-        message: message.into(),
-        primary: origin.clone(),
-        related: Vec::new(),
     }
 }
