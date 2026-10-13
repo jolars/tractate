@@ -51,7 +51,13 @@ fn render_source_only_deck_with_manifest_and_local_resources() {
         let path = file["path"].as_str().unwrap();
         let bytes = fs::read(destination.join(path)).unwrap();
         assert_eq!(file["bytes"], bytes.len());
-        assert_eq!(file["sha256"], format!("{:x}", Sha256::digest(&bytes)));
+        assert_eq!(
+            file["sha256"],
+            Sha256::digest(&bytes)
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>()
+        );
         if path != "index.html" {
             assert_eq!(bytes, fixture("figures/plot.svg").as_bytes());
             assert!(html.contains(&format!("src=\"{path}\"")));

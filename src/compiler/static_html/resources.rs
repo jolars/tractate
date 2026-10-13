@@ -38,7 +38,10 @@ pub(super) fn resolve(
     let resource = resources.entry(path.clone()).or_insert_with(|| {
         // Names depend on the source path, so query strings and fragments share
         // one asset while traversal and generated-file collisions are impossible.
-        let digest = format!("{:x}", Sha256::digest(path.as_bytes()));
+        let digest = Sha256::digest(path.as_bytes())
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>();
         let extension = Path::new(&path)
             .extension()
             .and_then(|s| s.to_str())
