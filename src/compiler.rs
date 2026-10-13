@@ -8,6 +8,7 @@ use crate::document::{
     YamlValue,
 };
 
+mod changes;
 mod presentation;
 mod queries;
 mod reuse;
@@ -15,6 +16,7 @@ mod state;
 pub(crate) mod static_html;
 mod validation;
 
+pub use changes::{SlideChangeSet, SlideMove, SlidePosition, SourceUpdate};
 pub use state::{Compiler, CompilerSnapshot, SourceRevision};
 
 /// Policy for a one-shot render, independent of cell evaluation options.

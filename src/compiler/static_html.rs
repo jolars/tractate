@@ -1,9 +1,9 @@
 //! Pure preparation of a source-only HTML deck and its resource dependencies.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::Arc;
 
 use super::queries::{DependencyGraph, QueryKey, Reads};
+use super::reuse::{SlideInput, slide_input};
 
 use crate::document::*;
 use crate::render::html::{self, CellContent, RenderedSlide};
@@ -11,12 +11,6 @@ use crate::render::html::{self, CellContent, RenderedSlide};
 mod resources;
 
 pub(super) type FragmentCache = BTreeMap<SlideId, CachedFragment>;
-
-#[derive(Debug, PartialEq, Eq)]
-enum SlideInput {
-    Title(String, ScalarStyle),
-    Content(Vec<Arc<super::reuse::SemanticNode>>),
-}
 
 #[derive(Debug)]
 pub(super) struct CachedFragment {
@@ -26,31 +20,6 @@ pub(super) struct CachedFragment {
     reads: BTreeSet<QueryKey>,
     origins: Vec<Origin>,
     result: Result<(RenderedSlide, BTreeMap<String, Resource>), Diagnostic>,
-}
-
-fn slide_input(snapshot: &super::CompilerSnapshot, slide: &Slide) -> SlideInput {
-    match &slide.kind {
-        SlideKind::Title(title) => {
-            let YamlKind::Scalar { text, style } = &title.kind else {
-                unreachable!("title is a scalar")
-            };
-            SlideInput::Title(text.clone(), *style)
-        }
-        SlideKind::Content(blocks) => SlideInput::Content(
-            blocks
-                .iter()
-                .map(|block| {
-                    Arc::clone(
-                        snapshot
-                            .nodes()
-                            .iter()
-                            .find(|node| node.id() == block.id)
-                            .expect("semantic block template"),
-                    )
-                })
-                .collect(),
-        ),
-    }
 }
 
 fn slide_origins(slide: &Slide) -> Vec<Origin> {

@@ -8,8 +8,11 @@ use std::fmt;
 pub(crate) struct NodeId(u64);
 
 /// A slide entity, independent of its heading, position, or rendered bytes.
+///
+/// Compare handles only within one compiler instance. Independent full builds
+/// allocate unrelated handles, and removed handles are never reassigned.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(crate) struct SlideId(u64);
+pub struct SlideId(u64);
 
 impl fmt::Display for SlideId {
     /// Format the semantic handle within its compilation scope.

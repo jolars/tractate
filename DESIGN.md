@@ -684,8 +684,29 @@ the requesting source snapshot.
 Title slides retain their live-session identity. Content slides retain theirs
 when their first block matches, preserving identity through body edits and
 moves. This is a best-effort matcher: changed boundary blocks or changed
-containers can receive new handles. Deterministic label-based identities and
-structural change sets remain subsequent work.
+containers can receive new handles. Deterministic label-based identities remain
+subsequent work.
+
+`update_source_with_changes` returns a `SourceUpdate` with the previous and new
+revisions and an explicit `SlideChangeSet`. The existing `update_source` method
+continues to return only the revision. Snapshots expose slide handles in
+presentation order through `slide_ids`. Insertions carry new positions, removals
+carry old positions, and reordered slides carry both. Reordering compares ranks
+among retained slides, so insertion and deletion alone do not report position
+shifts as moves. All retained slides whose relative rank changes are reported,
+including slides whose absolute position stays the same. The complete new order
+is included for reconstruction; the lists are differences, not sequential patch
+instructions.
+
+Modified slides retain their identity but have a changed title scalar or ordered
+semantic block templates. A slide can be both reordered and modified. Paths,
+offsets, and gaps between blocks do not count as content changes. This pure,
+backend-independent difference does not describe render invalidation from global
+defaults, references defined elsewhere, themes, or computation results. Boundary
+edits that receive fresh identities appear as removal and insertion. Identical
+updates return empty differences without advancing the revision. Invalid updates
+still report differences for their lowered presentation and retain their own
+inspection diagnostics.
 
 Snapshots share a fragment cache keyed by slide identity. A fragment is reused
 when its semantic templates, or title scalar, and the effective cell policies

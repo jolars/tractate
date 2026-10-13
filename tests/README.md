@@ -29,6 +29,11 @@ retained state can use the same assertion helper.
 path changes, identical updates, reversions, invalid input, and repair. It
 checks revision ordering, retained source origins and diagnostics, absence of
 filesystem access, and inspection equivalence with clean builds.
+`slide_changes.rs` checks the public slide difference API across insertion,
+deletion, reordering combined with modification, title and boundary edits,
+identical updates, path changes, repeated boundaries, source gaps, invalid
+input, repair, and deletion followed by restoration. It verifies positions,
+final order, revision pairing, and retained snapshot handles.
 `src/compiler/state/tests.rs` also checks revision exhaustion, shared snapshot
 reads, release of unused revisions, and HTML preparation from current and
 retained snapshots. Rendered HTML, resource dependencies, and errors are

@@ -7,6 +7,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 use crate::document::{DocumentInspection, Presentation, SemanticIds, SlideKind, SourceFile};
 use crate::parser;
 
+use super::changes::{SlideChangeSet, SourceUpdate};
 use super::queries::{DependencyGraph, QueryKey};
 use super::{RenderOptions, static_html};
 
@@ -91,11 +92,28 @@ impl Compiler {
     /// Panics on revision exhaustion before changing the current state, rather
     /// than wrapping or reusing a revision number.
     pub fn update_source(&mut self, source: SourceFile) -> SourceRevision {
+        self.update_source_with_changes(source).revision
+    }
+
+    /// Replace the input and describe slide changes from the preceding revision.
+    ///
+    /// Identical input returns an empty change set at the current revision.
+    /// Changes describe semantic slide content, independently of rendering,
+    /// execution, diagnostics, and source positions. See [`SlideChangeSet`].
+    ///
+    /// # Panics
+    ///
+    /// Panics on revision exhaustion before changing the current state.
+    pub fn update_source_with_changes(&mut self, source: SourceFile) -> SourceUpdate {
         let current = self.current.source();
         if source.text() == current.text()
             && source.path().map(Path::as_os_str) == current.path().map(Path::as_os_str)
         {
-            return self.revision();
+            return SourceUpdate {
+                previous_revision: self.revision(),
+                revision: self.revision(),
+                changes: SlideChangeSet::unchanged(&self.current),
+            };
         }
         let revision = SourceRevision(
             self.revision()
@@ -103,8 +121,14 @@ impl Compiler {
                 .checked_add(1)
                 .expect("source revision space exhausted"),
         );
-        self.current = CompilerSnapshot::updated(source, revision, Some(&self.current));
-        revision
+        let next = CompilerSnapshot::updated(source, revision, Some(&self.current));
+        let update = SourceUpdate {
+            previous_revision: self.revision(),
+            revision,
+            changes: SlideChangeSet::between(&self.current, &next),
+        };
+        self.current = next;
+        update
     }
 }
 
@@ -265,6 +289,11 @@ impl CompilerSnapshot {
     #[must_use]
     pub fn inspection(&self) -> &DocumentInspection {
         &self.0.inspection
+    }
+
+    /// Slide handles in presentation order, scoped to this compiler instance.
+    pub fn slide_ids(&self) -> impl ExactSizeIterator<Item = crate::document::SlideId> + '_ {
+        self.presentation().slides.iter().map(|slide| slide.id)
     }
 
     pub(super) fn presentation(&self) -> &Presentation {

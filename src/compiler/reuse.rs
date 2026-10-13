@@ -182,3 +182,34 @@ fn rebind_span(span: &SourceSpan, file: &SourceFile, offset: i128) -> SourceSpan
     })
     .expect("rebased span must lie on source UTF-8 boundaries")
 }
+
+#[derive(Debug, PartialEq, Eq)]
+pub(super) enum SlideInput {
+    Title(String, ScalarStyle),
+    Content(Vec<Arc<super::reuse::SemanticNode>>),
+}
+
+pub(super) fn slide_input(snapshot: &super::CompilerSnapshot, slide: &Slide) -> SlideInput {
+    match &slide.kind {
+        SlideKind::Title(title) => {
+            let YamlKind::Scalar { text, style } = &title.kind else {
+                unreachable!("title is a scalar")
+            };
+            SlideInput::Title(text.clone(), *style)
+        }
+        SlideKind::Content(blocks) => SlideInput::Content(
+            blocks
+                .iter()
+                .map(|block| {
+                    Arc::clone(
+                        snapshot
+                            .nodes()
+                            .iter()
+                            .find(|node| node.id() == block.id)
+                            .expect("semantic block template"),
+                    )
+                })
+                .collect(),
+        ),
+    }
+}

@@ -113,7 +113,7 @@ introduced.
   rendered slide fragments; keep effects out of tracked queries.
 - [x] Reuse stable semantic nodes and rendered fragments across revisions when
   their declared inputs are unchanged.
-- [ ] Return an explicit change set for inserted, removed, reordered, and
+- [x] Return an explicit change set for inserted, removed, reordered, and
   modified slides.
 - [ ] Build a full-build oracle and compare it with incremental output after
   edit sequences.
