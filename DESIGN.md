@@ -1077,10 +1077,47 @@ validate revision, attempt, execution key, and predecessor state before
 reporting a completion. Revision reconciliation, retries, and result publication
 remain part of the later scheduler work.
 
-The current plan records structural state dependencies. It does not compute
-execution or cumulative state keys, consult cached results, materialize
-interpreter state, authorize execution, or perform I/O. Those contracts remain
-subsequent planning and scheduler work.
+`EvaluationPlan::keyed(inputs)` adds execution and cumulative state keys in a
+pure second pass. Every enabled cell requires `ExecutionInputs` containing an
+environment digest and a computation-input digest. The caller must resolve and
+encode effective execution options and declared file dependencies before this
+pass; keying does not discover interpreters, read files, or resolve those inputs
+from YAML. Missing inputs and inconsistent environments within a stateful chain
+are errors. Extra input entries do not contribute to the plan.
+
+The environment digest covers interpreter and runtime identity, versions,
+environment variables, package locks, platform, and project and
+working-directory semantics. The computation-input digest covers effective
+execution options and declared input identities and contents. These supplied
+digests must use a versioned semantic encoding. The pass adds executable source,
+language, session, and the required predecessor state. SHA-256 hashes use
+distinct versioned domains and length-prefixed fields. Semantic cell IDs,
+labels, source positions, and revision numbers do not enter the keys.
+
+Each `KeyedCell` records its execution key, required predecessor-state key, and
+the resulting state key that a verified successful execution would materialize.
+The first stateful cell requires a key derived from its environment, language,
+and session. Every subsequent cell requires its predecessor's resulting key.
+Isolated cells have neither predecessor nor resulting session state. An optional
+globally unique volatile attempt token changes the resulting state and the
+stateful suffix, while leaving the cell's computation inputs unchanged. The
+coordinator supplies and retains this token; a bare coordinator-local attempt ID
+is insufficient for persistent identity. Replay retains the original token.
+
+`KeyedCell::has_cached_result()` compares an otherwise eligible committed
+successful result's execution key. Cache policy, provenance, and artifact
+validation remain the caller's responsibility. This check does not establish
+interpreter state. Independently, `KeyedEvaluationPlan::preparation()` compares
+the intended live runner's verified materialized state with the cell's required
+predecessor. A match permits direct execution. A mismatch requires startup or
+reset to the initial environment followed by replay of the exact enabled prefix
+in that language and session, even when all prefix outputs remain cached. An
+interpreter containing a later state also requires reconstruction; the MVP has
+no rollback. Isolated cells require their own fresh environment.
+
+Keyed plans perform no execution or publication and never advance a live
+runner's state. Input discovery and encoding, cache lookup, revision
+reconciliation, and effectful reconstruction remain subsequent work.
 
 ## Isolated cells
 
@@ -1859,10 +1896,11 @@ The compiler's previous-revision matcher retains unchanged templates and their
 handles across revisions. Deterministic label resolution remains later work.
 
 `ExecutionKey` and `ArtifactId` wrap separate 256-bit digests. Their
-constructors accept already computed digests; execution-input encoding, hash
-algorithms, artifact hashing, and persistent formats belong to the later
-planning and storage stages. Semantic IDs cannot serve as cache keys or artifact
-addresses.
+constructors accept already computed digests. The keyed evaluation pass hashes
+resolved execution inputs and cumulative state with SHA-256. Discovery and
+encoding of external execution inputs, artifact hashing, and persistent formats
+belong to the later planning and storage stages. Semantic IDs cannot serve as
+cache keys or artifact addresses.
 
 Slides and executable cells should have stable semantic IDs wherever possible.
 

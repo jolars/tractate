@@ -20,8 +20,9 @@ mod validation;
 
 pub use changes::{SlideChangeSet, SlideMove, SlidePosition, SourceUpdate};
 pub use evaluation::{
-    EvaluationPlan, EvaluationSchedule, EvaluationScheduleError, EvaluationSession, PlannedCell,
-    ScheduledCellState,
+    EvaluationKeyError, EvaluationPlan, EvaluationSchedule, EvaluationScheduleError,
+    EvaluationSession, ExecutionInputs, KeyedCell, KeyedEvaluationPlan, PlannedCell,
+    ScheduledCellState, SessionPreparation,
 };
 pub use state::{Compiler, CompilerSnapshot, SourceRevision};
 

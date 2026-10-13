@@ -8,8 +8,12 @@ use super::SourceRevision;
 use super::options::{boolean, execute_mappings};
 use super::queries::{DependencyGraph, QueryKey, Reads};
 
+mod keys;
 mod schedule;
 
+pub use keys::{
+    EvaluationKeyError, ExecutionInputs, KeyedCell, KeyedEvaluationPlan, SessionPreparation,
+};
 pub use schedule::{EvaluationSchedule, EvaluationScheduleError, ScheduledCellState};
 
 /// Desired computations in semantic document order at one source revision.
@@ -17,14 +21,15 @@ pub use schedule::{EvaluationSchedule, EvaluationScheduleError, ScheduledCellSta
 /// Only cells with effective `eval: true` appear here. Constructing or reading
 /// this plan performs no I/O and does not authorize execution. Predecessor links
 /// describe the cumulative state contributors, not materialized interpreter
-/// state. Execution keys and dispatch identities are assigned in later stages.
+/// state. [`Self::keyed`] adds computation identities once execution inputs have
+/// been resolved. Dispatch identities remain the coordinator's responsibility.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EvaluationPlan {
     pub source_revision: SourceRevision,
     pub cells: Vec<PlannedCell>,
 }
 
-/// One enabled source cell before execution keys and attempts are assigned.
+/// One enabled source cell before execution inputs and attempts are assigned.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PlannedCell {
     pub cell_id: CellId,

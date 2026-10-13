@@ -154,7 +154,7 @@ This stage establishes the effect boundary and race safety without depending on 
   stateful sessions.
 - [x] Plan isolated cells independently and allow unrelated sessions to make
   progress concurrently within a configurable limit.
-- [ ] Compute cumulative state keys and distinguish a logically cached result
+- [x] Compute cumulative state keys and distinguish a logically cached result
   from interpreter state that has actually been materialized.
 - [ ] Ensure render-only options do not enter execution keys.
 

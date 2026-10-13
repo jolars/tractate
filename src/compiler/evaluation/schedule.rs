@@ -91,20 +91,10 @@ pub struct EvaluationSchedule<'plan> {
 }
 
 impl EvaluationPlan {
-    /// Prepare independent progress through this plan without executing code.
-    ///
-    /// The positive limit counts all reserved cells across all languages,
-    /// sessions, and isolated cells. A limit of one serializes the plan. Plans
-    /// constructed or edited by callers must preserve unique cell IDs and the
-    /// immediate predecessor in each stateful chain, just like compiler plans.
-    pub fn schedule(
-        &self,
-        max_concurrent: NonZeroUsize,
-    ) -> Result<EvaluationSchedule<'_>, EvaluationScheduleError> {
+    pub(super) fn chain_predecessors(&self) -> Result<Vec<Option<usize>>, EvaluationScheduleError> {
         let mut indices = BTreeMap::new();
         let mut predecessors = BTreeMap::new();
-        let mut successors = vec![None; self.cells.len()];
-        let mut ready = BTreeSet::new();
+        let mut chain = Vec::with_capacity(self.cells.len());
         for (index, cell) in self.cells.iter().enumerate() {
             if indices.insert(cell.cell_id, index).is_some() {
                 return Err(EvaluationScheduleError::DuplicateCell(cell.cell_id));
@@ -121,8 +111,28 @@ impl EvaluationPlan {
                     actual: cell.predecessor,
                 });
             }
-            if let Some(predecessor) = expected {
-                successors[indices[&predecessor]] = Some(index);
+            chain.push(expected.map(|predecessor| indices[&predecessor]));
+        }
+        Ok(chain)
+    }
+
+    /// Prepare independent progress through this plan without executing code.
+    ///
+    /// The positive limit counts all reserved cells across all languages,
+    /// sessions, and isolated cells. A limit of one serializes the plan. Plans
+    /// constructed or edited by callers must preserve unique cell IDs and the
+    /// immediate predecessor in each stateful chain, just like compiler plans.
+    pub fn schedule(
+        &self,
+        max_concurrent: NonZeroUsize,
+    ) -> Result<EvaluationSchedule<'_>, EvaluationScheduleError> {
+        let mut indices = BTreeMap::new();
+        let mut successors = vec![None; self.cells.len()];
+        let mut ready = BTreeSet::new();
+        for (index, predecessor) in self.chain_predecessors()?.into_iter().enumerate() {
+            indices.insert(self.cells[index].cell_id, index);
+            if let Some(predecessor) = predecessor {
+                successors[predecessor] = Some(index);
             } else {
                 ready.insert(index);
             }
