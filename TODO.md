@@ -135,9 +135,9 @@ This stage establishes the effect boundary and race safety without depending on 
 
 ### 2.1 Define execution contracts
 
-- [ ] Define execution requests with source revision, attempt ID, cell ID,
+- [x] Define execution requests with source revision, attempt ID, cell ID,
   execution key, session ID, and required predecessor-state key.
-- [ ] Define success, failure, and cancellation outcomes with diagnostics,
+- [x] Define success, failure, and cancellation outcomes with diagnostics,
   duration, runner identity, and the effective execution key.
 - [ ] Define ordered output events for stdout, stderr, warnings, and display
   bundles.

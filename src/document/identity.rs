@@ -23,7 +23,7 @@ impl fmt::Display for SlideId {
 
 /// An executable cell entity, independent of its computation's reuse key.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(crate) struct CellId(u64);
+pub struct CellId(u64);
 
 /// Allocates semantic handles without deriving them from source or output bytes.
 ///
@@ -72,11 +72,9 @@ impl SemanticIds {
 ///
 /// The execution planner supplies the digest after encoding all relevant inputs.
 /// There are no conversions from semantic IDs or artifact IDs.
-#[allow(dead_code, reason = "Execution planning is a later roadmap stage.")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(crate) struct ExecutionKey([u8; 32]);
+pub struct ExecutionKey([u8; 32]);
 
-#[allow(dead_code, reason = "Execution planning is a later roadmap stage.")]
 impl ExecutionKey {
     pub fn from_digest(digest: [u8; 32]) -> Self {
         Self(digest)

@@ -854,6 +854,22 @@ carry structured diagnostics, duration, runner identity, and the effective
 execution key. Failed and cancelled outcomes must never be published as
 successful cache entries.
 
+The `execution` module defines the request and terminal outcome contracts.
+`ExecutionRequest` carries the source revision, attempt ID, cell ID, execution
+key, session ID, required predecessor-state key, language, and executable code.
+Stateful requests include a predecessor key even for the initial environment;
+isolated requests use `None`. Attempt and session IDs are scoped to one
+execution coordinator. Retries receive fresh attempt IDs, and runner restarts
+receive fresh process incarnations while retaining their logical session ID.
+
+`ExecutionOutcome` records an explicit success, failure, or cancellation status,
+structured diagnostics, and `ExecutionProvenance`. Provenance retains the full
+dispatched request, elapsed duration, runner name, version, process incarnation,
+and effective execution key. Retaining both requested and effective identities
+lets later publication checks reject obsolete or mismatched work. These data
+types perform no execution or publication. Ordered events, display bundles,
+runner transitions, and publication validation remain subsequent work.
+
 This should be deliberately smaller and simpler than the Jupyter messaging
 protocol, but it still needs enough structure to preserve event order and
 backend choices.

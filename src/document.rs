@@ -7,8 +7,8 @@ mod presentation;
 mod source;
 
 pub use diagnostic::*;
-pub use identity::SlideId;
-pub(crate) use identity::{CellId, NodeId, SemanticIds};
+pub use identity::{CellId, ExecutionKey, SlideId};
+pub(crate) use identity::{NodeId, SemanticIds};
 pub use origin::*;
 pub(crate) use presentation::*;
 pub(crate) use source::*;
