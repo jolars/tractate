@@ -26,6 +26,7 @@ pub enum DiagnosticCode {
     UnsupportedHtml,
     InvalidOptionValue,
     ExecutionUnavailable,
+    ExecutionWarning,
     ResultUnavailable,
     ResourceUnavailable,
 }
@@ -45,6 +46,7 @@ impl DiagnosticCode {
             Self::DuplicateLabel => "semantic.duplicate-label",
             Self::UnsupportedHtml => "render.unsupported-html",
             Self::InvalidOptionValue => "option.invalid-value",
+            Self::ExecutionWarning => "execution.warning",
             Self::ExecutionUnavailable => "render.execution-unavailable",
             Self::ResultUnavailable => "render.result-unavailable",
             Self::ResourceUnavailable => "render.resource-unavailable",

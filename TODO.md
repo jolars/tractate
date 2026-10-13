@@ -139,11 +139,11 @@ This stage establishes the effect boundary and race safety without depending on 
   execution key, session ID, and required predecessor-state key.
 - [x] Define success, failure, and cancellation outcomes with diagnostics,
   duration, runner identity, and the effective execution key.
-- [ ] Define ordered output events for stdout, stderr, warnings, and display
+- [x] Define ordered output events for stdout, stderr, warnings, and display
   bundles.
-- [ ] Define display representations for text, HTML, SVG, PNG, and artifact
+- [x] Define display representations for text, HTML, SVG, PNG, and artifact
   references, while allowing renderers to choose a supported representation.
-- [ ] Specify runner startup, execution, interruption, reset, crash, poison,
+- [x] Specify runner startup, execution, interruption, reset, crash, poison,
   restart, and shutdown transitions.
 
 ### 2.2 Plan computation

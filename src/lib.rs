@@ -18,6 +18,7 @@ pub use document::{
 };
 
 pub use execution::{
-    AttemptId, ExecutionOutcome, ExecutionProvenance, ExecutionRequest, ExecutionStatus,
-    RunnerIdentity, SessionId, StateKey,
+    ArtifactId, ArtifactReference, AttemptId, DisplayBundle, DisplayRepresentation,
+    ExecutionOutcome, ExecutionProvenance, ExecutionRequest, ExecutionStatus, OutputEvent,
+    OutputPayload, RepresentationKind, RunnerIdentity, SessionId, StateKey,
 };

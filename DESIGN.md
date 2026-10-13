@@ -830,7 +830,7 @@ struct CellResult {
 with:
 
 ```rust
-enum OutputEvent {
+enum OutputPayload {
     Stdout(String),
     Stderr(String),
     Warning(Diagnostic),
@@ -838,8 +838,7 @@ enum OutputEvent {
 }
 
 struct DisplayBundle {
-    representations: Vec<Representation>,
-    metadata: DisplayMetadata,
+    representations: Vec<DisplayRepresentation>,
 }
 ```
 
@@ -867,8 +866,29 @@ structured diagnostics, and `ExecutionProvenance`. Provenance retains the full
 dispatched request, elapsed duration, runner name, version, process incarnation,
 and effective execution key. Retaining both requested and effective identities
 lets later publication checks reject obsolete or mismatched work. These data
-types perform no execution or publication. Ordered events, display bundles,
-runner transitions, and publication validation remain subsequent work.
+types perform no execution or publication. Publication validation remains
+subsequent work.
+
+`ExecutionOutcome.events` retains all captured output, including partial output
+on failure or cancellation. Each `OutputEvent` carries source revision, session,
+cell, attempt, and sequence identities and an `OutputPayload` for stdout,
+stderr, a structured warning, or a display bundle. Sequence numbers start at
+zero for each attempt and increase by one across all event kinds. Receivers must
+reject missing, duplicate, out-of-order, or misattributed events as protocol
+errors. The terminal outcome contains that same stream in order. Late events
+from an obsolete attempt cannot enter another attempt's stream.
+
+`DisplayBundle` contains alternative `DisplayRepresentation` values for one
+output: text, HTML, SVG, PNG, or a generic artifact reference. PNG uses an
+`ArtifactReference` with media type `image/png`; binary bytes stay in the
+artifact store. Artifact IDs are opaque store identities, never paths or URLs,
+and refer to attempt-owned staged data until transactional publication.
+Producers should supply text fallbacks. `DisplayBundle::select` accepts a
+renderer's ordered kind preferences and an acceptance predicate for trust and
+media-type support. It returns the first acceptable alternative, or `None` when
+none is supported. HTML and SVG remain untrusted until the backend applies its
+trust policy. Source captions and presentation options stay outside runner
+bundles.
 
 This should be deliberately smaller and simpler than the Jupyter messaging
 protocol, but it still needs enough structure to preserve event order and
@@ -962,6 +982,38 @@ the adapter can prove that its state remains at a known cumulative state key.
 Recovery otherwise requires a fresh process and prefix replay. Killing work is
 not sufficient by itself; the scheduler must also reject any late result from
 the cancelled attempt.
+
+The adapter and scheduler must follow these transitions. A logical session keeps
+its `SessionId`; every fresh process receives a new
+`RunnerIdentity.incarnation`. Only an idle, usable runner may accept an
+execution request, and only one attempt may run in that process at a time.
+
+  | State                                               | Trigger                              | Result and obligations                                                                                                                                                                          |
+  | :-------------------------------------------------- | :----------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | Stopped                                             | Start                                | Enter starting; discover the executable, negotiate the shim, apply environment and limits, and assign a fresh incarnation.                                                                      |
+  | Starting                                            | Startup succeeds                     | Enter idle with the initial environment's materialized state key.                                                                                                                               |
+  | Starting                                            | Startup fails, times out, or crashes | Enter crashed; clean up the process tree and report the startup failure. No cell was executed.                                                                                                  |
+  | Idle                                                | Execute                              | For stateful requests, verify the required predecessor against materialized state, then enter running with the request's attempt ID. A mismatch requires reconstruction before dispatch.        |
+  | Running                                             | Success                              | Enter idle and record the resulting cumulative state key only if the protocol and state are verified. Output publication remains a separate scheduler decision.                                 |
+  | Running                                             | Cell failure                         | Report failure. Enter idle only if the adapter proves a known cumulative state; otherwise enter poisoned. Partial mutation must never be assumed to preserve the predecessor key.               |
+  | Running                                             | Interrupt                            | Enter interrupting and revoke publication eligibility immediately. Request graceful interruption, then force termination on timeout.                                                            |
+  | Interrupting                                        | Attempt terminates                   | Report cancellation. Enter idle only with proof of a known state; otherwise enter poisoned. Reject late output and success reports for the revoked attempt.                                     |
+  | Starting, idle, running, interrupting, or resetting | Crash or invalid protocol            | Enter crashed or poisoned, clear the materialized state key, revoke any active attempt, and clean up the process tree. An active attempt reports failure unless already cancelled.              |
+  | Idle or poisoned                                    | Reset                                | Enter resetting with no reusable materialized state. Quiesce the old attempt first; either restore a proven initial environment in place or replace the process with a fresh incarnation.       |
+  | Resetting                                           | Reset succeeds                       | Enter idle with the verified initial environment key. Reconstruct the required prefix before running a dependent cell.                                                                          |
+  | Resetting                                           | Reset fails                          | Enter poisoned, or crashed if the process died; no execution is permitted.                                                                                                                      |
+  | Poisoned or crashed                                 | Restart                              | Clean up the old process tree, then enter starting with a fresh incarnation. Cached output does not reconstruct interpreter state; replay the required prefix after startup.                    |
+  | Any state except stopped                            | Shutdown                             | Enter stopping, revoke active work, terminate and reap the entire process tree, then enter stopped with no materialized state. Cleanup failure leaves the runner stopping and must be reported. |
+
+Poisoned means a process may still exist but its interpreter state is unusable.
+Crashed means the interpreter or its control channel has failed. Neither state
+accepts execution. Interrupting, resetting, and stopping must finish or report a
+failure before another operation can reuse the process. Repeated interrupt and
+shutdown requests are idempotent; other commands in an ineligible state are
+rejected without dispatching code. A successful in-place reset may retain its
+incarnation, but reset must provide the same initial-state guarantee as startup.
+A restart always replaces the process. Recovery never restores publication
+eligibility for a revoked attempt, even when its late outcome reports success.
 
 The initial platform target is Linux and macOS. Windows support is deferred
 until interruption and descendant-process cleanup have an explicit, tested

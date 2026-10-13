@@ -88,12 +88,120 @@ pub enum ExecutionStatus {
 /// Failure and cancellation must never be published as successful cache entries.
 /// Success is still provisional: publication must validate the request's revision,
 /// attempt, session, predecessor state, and effective execution key against the
-/// currently desired computation. Output events are a separate protocol contract.
+/// currently desired computation. Events remain provisional until that check.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExecutionOutcome {
     pub status: ExecutionStatus,
     pub diagnostics: Vec<Diagnostic>,
+    /// Captured events in sequence order, including partial output on failure.
+    pub events: Vec<OutputEvent>,
     pub provenance: ExecutionProvenance,
+}
+
+/// One captured event, attributed before any asynchronous delivery.
+///
+/// Sequences start at zero for each attempt and increase by one across all output
+/// kinds. Receivers must reject duplicate, missing, or out-of-order sequences and
+/// mismatched identities as protocol errors. A terminal outcome contains the same
+/// stream in sequence order; it does not authorize publication of partial output.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OutputEvent {
+    pub source_revision: SourceRevision,
+    pub session_id: SessionId,
+    pub cell_id: CellId,
+    pub attempt_id: AttemptId,
+    pub sequence: u64,
+    pub payload: OutputPayload,
+}
+
+/// Captured output, unaffected by source visibility or rendering options.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum OutputPayload {
+    Stdout(String),
+    Stderr(String),
+    Warning(Diagnostic),
+    Display(DisplayBundle),
+}
+
+/// An opaque artifact identity, resolved through the artifact store.
+///
+/// This is not a filesystem path or URL. During execution it refers to staged
+/// data owned by the attempt; publication must commit that data transactionally.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ArtifactId(pub String);
+
+/// A reference to stored bytes with their declared media type.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ArtifactReference {
+    pub id: ArtifactId,
+    pub media_type: String,
+}
+
+/// Representation categories that a renderer can advertise in preference order.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RepresentationKind {
+    Text,
+    Html,
+    Svg,
+    Png,
+    Artifact,
+}
+
+/// Alternative representations of a single displayed value.
+///
+/// HTML and SVG are untrusted content and require the backend's trust policy.
+/// PNG bytes live in the artifact store; their reference must declare `image/png`.
+/// Generic artifacts allow additional media types without changing this enum.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DisplayRepresentation {
+    Text(String),
+    Html(String),
+    Svg(String),
+    Png(ArtifactReference),
+    Artifact(ArtifactReference),
+}
+
+impl DisplayRepresentation {
+    pub fn kind(&self) -> RepresentationKind {
+        match self {
+            Self::Text(_) => RepresentationKind::Text,
+            Self::Html(_) => RepresentationKind::Html,
+            Self::Svg(_) => RepresentationKind::Svg,
+            Self::Png(_) => RepresentationKind::Png,
+            Self::Artifact(_) => RepresentationKind::Artifact,
+        }
+    }
+}
+
+/// Several alternatives for one value, never several successive outputs.
+///
+/// Producers should include a text fallback for rich output. Source captions and
+/// presentation options belong to the compiler, not this runner-owned bundle.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DisplayBundle {
+    pub representations: Vec<DisplayRepresentation>,
+}
+
+impl DisplayBundle {
+    /// Select the first acceptable representation in the renderer's preference
+    /// order. The predicate checks trust and, for artifacts, supported media types.
+    /// Returns `None` when the backend cannot safely present any alternative.
+    pub fn select(
+        &self,
+        preferences: &[RepresentationKind],
+        mut accepts: impl FnMut(&DisplayRepresentation) -> bool,
+    ) -> Option<&DisplayRepresentation> {
+        for kind in preferences {
+            if let Some(representation) = self
+                .representations
+                .iter()
+                .find(|representation| representation.kind() == *kind && accepts(representation))
+            {
+                return Some(representation);
+            }
+        }
+        None
+    }
 }
 
 #[cfg(test)]
@@ -125,6 +233,7 @@ mod tests {
             let outcome = ExecutionOutcome {
                 status,
                 diagnostics: compiler.snapshot().inspection().diagnostics.clone(),
+                events: Vec::new(),
                 provenance: ExecutionProvenance {
                     request: request.clone(),
                     effective_execution_key: ExecutionKey::from_digest([4; 32]),
@@ -147,6 +256,61 @@ mod tests {
                 outcome.provenance.request.execution_key
             );
         }
+    }
+
+    #[test]
+    fn display_selection_respects_backend_preferences_and_trust() {
+        let bundle = DisplayBundle {
+            representations: vec![
+                DisplayRepresentation::Html("<b>value</b>".into()),
+                DisplayRepresentation::Text("value".into()),
+                DisplayRepresentation::Svg("<svg/>".into()),
+                DisplayRepresentation::Png(ArtifactReference {
+                    id: ArtifactId("plot".into()),
+                    media_type: "image/png".into(),
+                }),
+                DisplayRepresentation::Artifact(ArtifactReference {
+                    id: ArtifactId("table".into()),
+                    media_type: "text/csv".into(),
+                }),
+            ],
+        };
+        assert_eq!(
+            bundle.select(&[RepresentationKind::Png, RepresentationKind::Text], |_| {
+                true
+            }),
+            Some(&bundle.representations[3])
+        );
+        assert_eq!(
+            bundle.select(&[RepresentationKind::Html, RepresentationKind::Text], |r| {
+                !matches!(r, DisplayRepresentation::Html(_))
+            }),
+            Some(&bundle.representations[1])
+        );
+        assert_eq!(
+            bundle.select(&[RepresentationKind::Artifact], |r| {
+                matches!(r, DisplayRepresentation::Artifact(a) if a.media_type == "application/pdf")
+            }),
+            None
+        );
+        assert_eq!(
+            bundle.select(&[RepresentationKind::Svg], |_| true),
+            Some(&bundle.representations[2])
+        );
+        assert_eq!(
+            bundle.select(&[RepresentationKind::Artifact], |r| {
+                matches!(r, DisplayRepresentation::Artifact(a) if a.media_type == "text/csv")
+            }),
+            Some(&bundle.representations[4])
+        );
+        assert_eq!(bundle.select(&[], |_| true), None);
+        assert_eq!(
+            DisplayBundle {
+                representations: vec![]
+            }
+            .select(&[RepresentationKind::Text], |_| true),
+            None
+        );
     }
 
     #[test]
