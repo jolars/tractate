@@ -36,6 +36,14 @@ cell restores its place in the stateful chain. Render options and missing files
 do not affect planning. Invalid options retain their QMD origins. Incremental
 edits, errors, and repair match clean plans with LF and CRLF source.
 
+`evaluation_keys.rs` checks execution and cumulative state identities, logical
+result reuse, and physical prefix replay. Cell edits to `echo`, `include`,
+`results`, and `fig-cap`, and document display-default edits with local
+overrides, preserve all keys. The edit sequences cover nested cells, default and
+named stateful sessions, isolated cells, LF and CRLF, and `cache: false` with
+retained volatile attempt tokens. Each incremental revision matches a clean full
+build.
+
 `evaluation_schedule.rs` checks independent isolated cells and language and
 session chains under a global concurrency limit, document-order reservations,
 out-of-order completions, and failure or cancellation confined to a session's

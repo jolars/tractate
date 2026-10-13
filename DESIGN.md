@@ -1094,6 +1094,13 @@ language, session, and the required predecessor state. SHA-256 hashes use
 distinct versioned domains and length-prefixed fields. Semantic cell IDs,
 labels, source positions, and revision numbers do not enter the keys.
 
+The supplied digests must exclude `echo`, `include`, `results`, and `fig-cap`,
+as well as labels and the `eval` and `cache` Booleans. Hashing complete option
+mappings or the QMD source would violate this contract. Rendering-only edits
+retain the resolved execution inputs and any current volatile attempt token,
+preserving both execution and cumulative state keys, including for
+`cache: false` cells. Figure dimensions remain execution-affecting inputs.
+
 Each `KeyedCell` records its execution key, required predecessor-state key, and
 the resulting state key that a verified successful execution would materialize.
 The first stateful cell requires a key derived from its environment, language,

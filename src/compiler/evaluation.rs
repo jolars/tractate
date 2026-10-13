@@ -30,6 +30,9 @@ pub struct EvaluationPlan {
 }
 
 /// One enabled source cell before execution inputs and attempts are assigned.
+///
+/// Render-only options remain in the presentation IR, outside this computation
+/// plan. Executable source excludes their declarations.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PlannedCell {
     pub cell_id: CellId,

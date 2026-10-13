@@ -48,6 +48,124 @@ fn keys(plan: &KeyedEvaluationPlan<'_>) -> Vec<(ExecutionKey, Option<StateKey>, 
         .collect()
 }
 
+fn assert_render_edits_preserve_keys(initial: &str, edits: &[String], volatile: bool) {
+    let observe = |snapshot: &CompilerSnapshot| {
+        let plan = snapshot.evaluation_plan().unwrap();
+        let mut resolved = inputs(plan);
+        if volatile {
+            // Rendering edits retain the authorized attempts rather than
+            // supplying fresh tokens that would invalidate their suffixes.
+            for (index, cell) in plan.cells.iter().enumerate() {
+                resolved.get_mut(&cell.cell_id).unwrap().volatile_nonce =
+                    Some([u8::try_from(index + 3).unwrap(); 32]);
+            }
+        }
+        keys(&plan.keyed(&resolved).unwrap())
+    };
+    let mut compiler = Compiler::new(SourceFile::new("slides.qmd", initial));
+    let retained = compiler.snapshot();
+    let original = observe(&retained);
+    assert_eq!(original.len(), 4);
+    for edit in edits {
+        assert_ne!(edit.as_str(), compiler.snapshot().source().text());
+        compiler.update_source(SourceFile::new("slides.qmd", edit));
+        let current = observe(&compiler.snapshot());
+        assert_eq!(current, observe(&snapshot(edit)), "full build: {edit}");
+        assert_eq!(current, original, "render-only edit: {edit}");
+    }
+    assert_eq!(observe(&retained), original);
+}
+
+#[test]
+fn evaluation_keys_ignore_cell_render_options_including_nested_cells() {
+    let options = "#| echo: true\n#| include: true\n#| results: markup\n#| fig-cap: Caption\n";
+    for session in ["default", "analysis", "isolated"] {
+        let nested = cell("c", "r", session).replace("c()", &format!("{options}c()"));
+        let nested: String = nested.lines().map(|line| format!("> {line}\n")).collect();
+        let body = format!(
+            "{}{}{nested}\n{}",
+            cell("a", "r", session),
+            cell("b", "r", session),
+            cell("d", "r", session),
+        );
+        for volatile in [false, true] {
+            let initial = format!("---\nexecute:\n  cache: {}\n---\n\n{body}", !volatile);
+            let edits = [
+                initial.replace("> #| echo: true", "> #| echo: false"),
+                initial.replace("> #| include: true", "> #| include: false"),
+                initial.replace("> #| results: markup", "> #| results: hide"),
+                initial.replace(
+                    "> #| fig-cap: Caption",
+                    "> #| fig-cap: Updated **caption**.",
+                ),
+                initial.replace("> #| fig-cap: Caption", "> #| fig-cap: ''"),
+                initial.replace("> #| fig-cap: Caption", "> #| fig-cap: '   '"),
+                initial.replace(
+                    "> #| fig-cap: Caption",
+                    "> #| fig-cap: |-\n> #|   A café figure.\n> #|   Another line.",
+                ),
+                initial.replace(
+                    "> #| fig-cap: Caption",
+                    "> #| fig-cap: >-\n> #|   A folded\n> #|   caption.",
+                ),
+                initial
+                    .replace("> #| echo: true", "> #| echo: FALSE")
+                    .replace("> #| include: true", "> #| include: False")
+                    .replace("> #| results: markup", "> #| results: 'hide'")
+                    .replace("> #| fig-cap: Caption", "> #| fig-cap: \"New caption\""),
+                initial.replace(&options.replace("#|", "> #|"), ""),
+                initial.clone(),
+            ];
+            for line_ending in ["\n", "\r\n"] {
+                assert_render_edits_preserve_keys(
+                    &initial.replace('\n', line_ending),
+                    &edits.each_ref().map(|edit| edit.replace('\n', line_ending)),
+                    volatile,
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn evaluation_keys_ignore_document_render_defaults_and_local_overrides() {
+    let defaults = "  echo: true\n  include: true\n  results: markup\n";
+    let body = chain().replace("#| session: default\n", "").replace(
+        "c()",
+        "#| echo: true\n#| include: true\n#| results: markup\nc()",
+    );
+    for session in ["default", "analysis", "isolated"] {
+        for volatile in [false, true] {
+            let initial = format!(
+                "---\nexecute:\n  session: {session}\n  cache: {}\n{defaults}---\n\n{body}",
+                !volatile,
+            );
+            let edits = [
+                initial.replace("  echo: true", "  echo: false"),
+                initial.replace("  include: true", "  include: false"),
+                initial.replace("  results: markup", "  results: hide"),
+                initial.replace(
+                    defaults,
+                    "  echo: FALSE\n  include: False\n  results: 'hide'\n",
+                ),
+                initial.replace(
+                    defaults,
+                    "  results: \"markup\"\n  include: TRUE\n  echo: True\n",
+                ),
+                initial.replace(defaults, ""),
+                initial.clone(),
+            ];
+            for line_ending in ["\n", "\r\n"] {
+                assert_render_edits_preserve_keys(
+                    &initial.replace('\n', line_ending),
+                    &edits.each_ref().map(|edit| edit.replace('\n', line_ending)),
+                    volatile,
+                );
+            }
+        }
+    }
+}
+
 #[test]
 fn evaluation_keys_preserve_cached_prefix_but_require_replay_after_a_suffix_edit() {
     let source = chain();

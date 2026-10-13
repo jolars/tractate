@@ -21,8 +21,12 @@ pub struct ExecutionInputs {
     /// variables, package locks, platform, and project and working-directory semantics.
     /// This must be constant within a language and stateful session.
     pub environment_digest: [u8; 32],
-    /// Effective execution options and declared input paths and content digests.
-    /// Language, source, session, and predecessor state are added by the planner.
+    /// Effective execution-affecting options, including figure dimensions, and
+    /// declared input paths and content digests. Encode resolved semantic values,
+    /// never complete YAML mappings or the document source. Exclude `echo`,
+    /// `include`, `results`, `fig-cap`, labels, and the `eval` and `cache` Booleans.
+    /// Language, executable source, session, and predecessor state are added by
+    /// the planner.
     pub computation_digest: [u8; 32],
     /// A globally unique token for an authorized volatile execution, retained
     /// while that attempt remains current. Its stateful suffix cannot reuse the
@@ -125,7 +129,9 @@ impl EvaluationPlan {
     /// Every enabled cell requires an entry. Extra entries, including disabled
     /// cells, are ignored. Discovery of environments, execution options, and file
     /// dependencies belongs to the caller. This pass performs no I/O, consults
-    /// no cache, and assigns no runner or dispatch identities.
+    /// no cache, and assigns no runner or dispatch identities. Render-only edits
+    /// preserve keys when the caller retains the resolved execution inputs and
+    /// any current volatile attempt token.
     pub fn keyed(
         &self,
         inputs: &BTreeMap<CellId, ExecutionInputs>,

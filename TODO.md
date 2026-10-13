@@ -156,7 +156,7 @@ This stage establishes the effect boundary and race safety without depending on 
   progress concurrently within a configurable limit.
 - [x] Compute cumulative state keys and distinguish a logically cached result
   from interpreter state that has actually been materialized.
-- [ ] Ensure render-only options do not enter execution keys.
+- [x] Ensure render-only options do not enter execution keys.
 
 ### 2.3 Add the scheduler and transactional artifact path
 
