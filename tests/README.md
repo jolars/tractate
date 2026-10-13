@@ -39,6 +39,17 @@ reads, release of unused revisions, and HTML preparation from current and
 retained snapshots. Rendered HTML, resource dependencies, and errors are
 compared with clean builds after each edit in both execution modes.
 
+`src/compiler/state/tests/oracle.rs` compares the complete presentation tree
+with direct parsing and lowering that bypass semantic-template reuse. It
+canonicalizes compiler-scoped handles within each semantic subtree while
+preserving origins and result-slot relationships. Fresh compilers supply the
+inspection and HTML oracle in both execution modes, including complete render
+diagnostics and resource origins. Every QMD fixture undergoes insertion, prose
+edits, movement, deletion, and restoration with LF and CRLF input. Additional
+sequences edit references, inherited defaults, local overrides, titles, labels,
+execution requirements, invalid options, and paths. A negative control confirms
+that stale semantic output fails the oracle.
+
 `src/compiler/state/tests/reuse.rs` verifies shared semantic-template and HTML
 allocations across prose edits, slide moves, insertions, removals, and repeated
 content. Reference changes invalidate only slides that use the changed target,

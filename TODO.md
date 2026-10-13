@@ -115,7 +115,7 @@ introduced.
   their declared inputs are unchanged.
 - [x] Return an explicit change set for inserted, removed, reordered, and
   modified slides.
-- [ ] Build a full-build oracle and compare it with incremental output after
+- [x] Build a full-build oracle and compare it with incremental output after
   edit sequences.
 
 ### Gate 1—Static incremental compiler
