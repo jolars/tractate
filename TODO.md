@@ -121,13 +121,13 @@ introduced.
 ### Gate 1—Static incremental compiler
 
 - [x] A representative source-only QMD renders as a usable Reveal.js deck.
-- [ ] Editing prose on one slide changes only that slide's rendered fragment.
-- [ ] Inserting, deleting, and moving slides produces a correct structural
+- [x] Editing prose on one slide changes only that slide's rendered fragment.
+- [x] Inserting, deleting, and moving slides produces a correct structural
   change set.
-- [ ] Incremental output equals a clean full build after every fixture edit
+- [x] Incremental output equals a clean full build after every fixture edit
   sequence.
-- [ ] Syntax, option, and duplicate-label errors point into the original QMD.
-- [ ] `task check` passes.
+- [x] Syntax, option, and duplicate-label errors point into the original QMD.
+- [x] `task check` passes.
 
 ## Stage 2—Prove execution semantics with a fake runner
 
