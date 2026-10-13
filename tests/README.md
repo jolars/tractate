@@ -87,6 +87,29 @@ diagnostics, preservation of prior output on failure, input protection, and
 argument errors. Linux process traces cover source-only, disabled-cell,
 malformed, and execution-requiring documents without launching a runner.
 
+The first Gate 1 check also has a browser smoke check. Render the representative
+fixture into a temporary directory:
+
+```bash
+deck_check_dir=$(mktemp -d)
+cp -r tests/fixtures/static-deck.qmd tests/fixtures/figures "$deck_check_dir/"
+cargo run -- render "$deck_check_dir/static-deck.qmd" --to html
+```
+
+Open the emitted `static-deck_html/index.html` in a browser with network access
+for the pinned Reveal.js and KaTeX assets. Verify that the four slides show the
+title, leading prose with bold text and Unicode, inline and display math, and
+ordinary R source with the circle image. The dollar amounts must remain prose.
+Use the arrow keys and on-screen controls to navigate forward and backward, and
+check the browser console for JavaScript errors. Delete the temporary directory
+after closing the deck.
+
+Verified on October 13, 2026, with Chromium 154.0.8037.97: all four slides were
+reachable, both math expressions rendered, the SVG loaded, keyboard navigation
+worked, and no JavaScript exceptions occurred. A screenshot inspection confirmed
+the math slide's layout. The CLI test above verifies the generated files and
+manifest separately; it does not substitute for this browser check.
+
 `cli/no_execute.rs` checks the explicit execution prohibition. Source-only
 documents, including disabled cells with defaults and nested overrides, must
 match a clean ordinary render byte for byte. Missing results produce one QMD

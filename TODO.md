@@ -120,7 +120,7 @@ introduced.
 
 ### Gate 1—Static incremental compiler
 
-- [ ] A representative source-only QMD renders as a usable Reveal.js deck.
+- [x] A representative source-only QMD renders as a usable Reveal.js deck.
 - [ ] Editing prose on one slide changes only that slide's rendered fragment.
 - [ ] Inserting, deleting, and moving slides produces a correct structural
   change set.
