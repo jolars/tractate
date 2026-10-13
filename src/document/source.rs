@@ -8,6 +8,8 @@
 use super::{CellId, NodeId, Origin, SourceFile, SourceSpan};
 
 mod mapping;
+mod transform;
+pub(crate) use transform::{Transform, TransformTree};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct SourceDocument {

@@ -40,7 +40,7 @@ fn html_sections_wrap_every_slide_in_presentation_order() {
     for (index, (section, body)) in rendered.iter().zip(bodies).enumerate() {
         assert_eq!(section.id, visited[index]);
         assert_eq!(
-            section.html,
+            section.html.as_str(),
             format!("<section data-slide-id=\"slide-{index}\">\n{body}</section>\n")
         );
     }
@@ -65,7 +65,7 @@ fn html_sections_preserve_body_markup_and_whitespace_exactly() {
     let rendered =
         render_sections(&presentation, |_| Ok::<_, Infallible>(body.to_owned())).unwrap();
     assert_eq!(
-        rendered[0].html,
+        rendered[0].html.as_str(),
         format!("<section data-slide-id=\"slide-0\">\n{body}</section>\n")
     );
 }
@@ -97,7 +97,7 @@ fn html_sections_keep_semantic_ids_through_edits_and_structural_changes() {
         render_sections(&deck, |_| Ok::<_, Infallible>("<p>Changed</p>".into())).unwrap();
     for (section, expected) in rendered.iter().zip([3, 2, 1]) {
         assert_eq!(
-            section.html,
+            section.html.as_str(),
             format!("<section data-slide-id=\"slide-{expected}\">\n<p>Changed</p></section>\n")
         );
     }

@@ -26,13 +26,23 @@ pub(crate) struct CellId(u64);
 ///
 /// Handles are unique within this allocator's scope. Fresh full builds start a
 /// new scope; values from separate scopes must not be compared. Retaining IDs
-/// across revisions will require label resolution and previous-revision matching.
+/// across revisions uses the compiler's previous-revision matcher.
 #[derive(Debug, Default)]
 pub(crate) struct SemanticIds {
     next: Cell<u64>,
 }
 
 impl SemanticIds {
+    pub fn starting_at(next: u64) -> Self {
+        Self {
+            next: Cell::new(next),
+        }
+    }
+
+    pub fn next(&self) -> u64 {
+        self.next.get()
+    }
+
     pub fn node(&self) -> NodeId {
         NodeId(self.allocate())
     }

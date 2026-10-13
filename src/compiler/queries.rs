@@ -2,7 +2,8 @@
 //!
 //! Keys use semantic handles, never source ranges. The graph records reads,
 //! including reads made before a query fails. It does not perform effects or
-//! establish identity or reuse between different revisions.
+//! establish identity between different revisions. Reused queries replay their
+//! recorded reads after the caller validates the corresponding input values.
 
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
@@ -44,6 +45,14 @@ impl DependencyGraph {
 
     pub fn finish(&mut self, key: QueryKey, reads: Reads) {
         self.edges.insert(key, reads.0.into_inner());
+    }
+
+    pub fn inputs(&self, key: &QueryKey) -> &BTreeSet<QueryKey> {
+        &self.edges[key]
+    }
+
+    pub fn reuse(&mut self, key: QueryKey, inputs: BTreeSet<QueryKey>) {
+        self.edges.insert(key, inputs);
     }
 
     pub fn is_closed(&self) -> bool {

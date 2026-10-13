@@ -4,12 +4,13 @@ use crate::document::*;
 
 #[cfg(test)]
 pub(super) fn lower_presentation(source: SourcePresentation) -> Presentation {
-    lower_presentation_with(source, lower_slide)
+    lower_presentation_with(source, lower_slide, lower_block)
 }
 
 pub(super) fn lower_presentation_with(
     source: SourcePresentation,
     lower_slide: impl FnMut(Slide<Cell>) -> Slide,
+    lower_block: impl FnMut(Block) -> Block<PresentedCell>,
 ) -> Presentation {
     Presentation {
         origin: source.origin.derived("presentation-ir"),
@@ -19,7 +20,15 @@ pub(super) fn lower_presentation_with(
     }
 }
 
+#[cfg(test)]
 pub(super) fn lower_slide(slide: Slide<Cell>) -> Slide {
+    lower_slide_with(slide, lower_block)
+}
+
+pub(super) fn lower_slide_with(
+    slide: Slide<Cell>,
+    lower_block: impl FnMut(Block) -> Block<PresentedCell>,
+) -> Slide {
     Slide {
         id: slide.id,
         origin: slide.origin.derived("presentation-slide"),
@@ -32,7 +41,7 @@ pub(super) fn lower_slide(slide: Slide<Cell>) -> Slide {
     }
 }
 
-fn lower_block(block: Block) -> Block<PresentedCell> {
+pub(super) fn lower_block(block: Block) -> Block<PresentedCell> {
     block.map_cells(&mut |cell| PresentedCell {
         id: cell.id,
         origin: cell.origin.derived("cell-presentation"),

@@ -111,7 +111,7 @@ introduced.
   in-memory compiler state.
 - [x] Track dependencies from source through semantic blocks, slides, and
   rendered slide fragments; keep effects out of tracked queries.
-- [ ] Reuse stable semantic nodes and rendered fragments across revisions when
+- [x] Reuse stable semantic nodes and rendered fragments across revisions when
   their declared inputs are unchanged.
 - [ ] Return an explicit change set for inserted, removed, reordered, and
   modified slides.

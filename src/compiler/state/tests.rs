@@ -3,6 +3,7 @@ use crate::compiler::{RenderOptions, static_html};
 use crate::document::{DiagnosticCode, SourceRange};
 
 mod dependencies;
+mod reuse;
 
 #[test]
 fn compiler_state_revision_exhaustion_preserves_the_current_snapshot() {
@@ -81,7 +82,12 @@ fn html(
         slides: compiled
             .slides
             .into_iter()
-            .map(|slide| slide.html)
+            .map(|slide| {
+                slide.html.replace(
+                    &format!("data-slide-id=\"slide-{}\"", slide.id),
+                    "data-slide-id=\"slide\"",
+                )
+            })
             .collect(),
         resources: compiled
             .resources

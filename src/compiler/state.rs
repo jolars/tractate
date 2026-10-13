@@ -2,9 +2,9 @@
 
 use std::fmt;
 use std::path::Path;
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 
-use crate::document::{DocumentInspection, Presentation, SlideKind, SourceFile};
+use crate::document::{DocumentInspection, Presentation, SemanticIds, SlideKind, SourceFile};
 use crate::parser;
 
 use super::queries::{DependencyGraph, QueryKey};
@@ -40,8 +40,9 @@ impl fmt::Display for SourceRevision {
 /// Construction and updates parse, lower, and validate the supplied source
 /// without filesystem access or execution. Snapshots track pure dependencies
 /// through semantic blocks, slides, and lazily prepared HTML fragments. Each
-/// changed input currently rebuilds the complete presentation; reuse across edits
-/// is separate compiler work. Only the current snapshot is retained internally.
+/// changed input is parsed and validated anew, while unchanged semantic blocks
+/// and HTML fragments reuse their pure compiled values. Only the current snapshot
+/// is retained internally.
 ///
 /// ```
 /// use tractate::{Compiler, SourceFile};
@@ -102,7 +103,7 @@ impl Compiler {
                 .checked_add(1)
                 .expect("source revision space exhausted"),
         );
-        self.current = CompilerSnapshot::new(source, revision);
+        self.current = CompilerSnapshot::updated(source, revision, Some(&self.current));
         revision
     }
 }
@@ -122,15 +123,31 @@ struct SnapshotData {
     inspection: DocumentInspection,
     dependencies: DependencyGraph,
     html: [OnceLock<static_html::HtmlCompilation>; 2],
+    next_id: u64,
+    next_slide: u64,
+    nodes: Vec<Arc<super::reuse::SemanticNode>>,
+    fragments: Arc<Mutex<static_html::FragmentCache>>,
 }
 
 impl CompilerSnapshot {
     fn new(source: SourceFile, revision: SourceRevision) -> Self {
+        Self::updated(source, revision, None)
+    }
+
+    fn updated(source: SourceFile, revision: SourceRevision, previous: Option<&Self>) -> Self {
+        let ids = SemanticIds::starting_at(previous.map_or(0, |previous| previous.0.next_id));
+        let slide_ids =
+            SemanticIds::starting_at(previous.map_or(0, |previous| previous.0.next_slide));
         let mut dependencies = DependencyGraph::default();
         dependencies.query(QueryKey::Source, |_| ());
-        let lowered = dependencies.query(QueryKey::SourceDocument, |reads| {
+        let mut lowered = dependencies.query(QueryKey::SourceDocument, |reads| {
             parser::lower(reads.read(QueryKey::Source, source.clone()))
         });
+        let nodes = super::reuse::semantic_nodes(
+            &mut lowered.document.blocks,
+            previous.map_or(&[], |previous| &previous.0.nodes),
+            &ids,
+        );
         dependencies.query(QueryKey::Metadata, |reads| {
             reads.read(QueryKey::SourceDocument, &lowered.document.metadata)
         });
@@ -156,25 +173,54 @@ impl CompilerSnapshot {
                 inspection_reads.read(QueryKey::SourceDocument, &lowered.document),
             ));
         }
-        let grouped = dependencies.query(QueryKey::SlideLayout, |reads| {
+        let mut grouped = dependencies.query(QueryKey::SlideLayout, |reads| {
             super::build_presentation(reads.read(QueryKey::SourceDocument, lowered.document))
         });
-        let presentation = super::presentation::lower_presentation_with(grouped, |slide| {
-            dependencies.query(QueryKey::Slide(slide.id), |reads| {
-                let slide = reads.read(QueryKey::SlideLayout, slide);
-                match &slide.kind {
-                    SlideKind::Title(title) => {
-                        reads.read(QueryKey::Metadata, title);
-                    }
-                    SlideKind::Content(blocks) => {
-                        for block in blocks {
-                            reads.read(QueryKey::SemanticBlock(block.id), block);
+        let mut old_slides: Vec<_> = previous
+            .into_iter()
+            .flat_map(|previous| &previous.presentation().slides)
+            .collect();
+        for slide in &mut grouped.slides {
+            let matched = old_slides
+                .iter()
+                .position(|old| match (&old.kind, &slide.kind) {
+                    (SlideKind::Title(_), SlideKind::Title(_)) => true,
+                    (SlideKind::Content(old), SlideKind::Content(new)) => old
+                        .first()
+                        .zip(new.first())
+                        .is_some_and(|(old, new)| old.id == new.id),
+                    _ => false,
+                });
+            slide.id =
+                matched.map_or_else(|| slide_ids.slide(), |index| old_slides.remove(index).id);
+        }
+        let lowered_block = |block: crate::document::Block| {
+            nodes
+                .iter()
+                .find(|node| node.id() == block.id)
+                .expect("every top-level block has a semantic template")
+                .presented(&block)
+        };
+        let presentation = super::presentation::lower_presentation_with(
+            grouped,
+            |slide| {
+                dependencies.query(QueryKey::Slide(slide.id), |reads| {
+                    let slide = reads.read(QueryKey::SlideLayout, slide);
+                    match &slide.kind {
+                        SlideKind::Title(title) => {
+                            reads.read(QueryKey::Metadata, title);
+                        }
+                        SlideKind::Content(blocks) => {
+                            for block in blocks {
+                                reads.read(QueryKey::SemanticBlock(block.id), block);
+                            }
                         }
                     }
-                }
-                super::presentation::lower_slide(slide)
-            })
-        });
+                    super::presentation::lower_slide_with(slide, lowered_block)
+                })
+            },
+            lowered_block,
+        );
         inspection_reads.read(QueryKey::SlideLayout, &presentation);
         for slide in &presentation.slides {
             inspection_reads.read(QueryKey::Slide(slide.id), slide);
@@ -184,6 +230,13 @@ impl CompilerSnapshot {
             diagnostics,
         };
         dependencies.finish(QueryKey::Inspection, inspection_reads);
+        let fragments = previous.map_or_else(Default::default, |previous| {
+            Arc::clone(&previous.0.fragments)
+        });
+        fragments
+            .lock()
+            .expect("fragment cache lock")
+            .retain(|id, _| presentation.slides.iter().any(|slide| slide.id == *id));
         Self(Arc::new(SnapshotData {
             revision,
             source,
@@ -191,6 +244,10 @@ impl CompilerSnapshot {
             inspection,
             dependencies,
             html: Default::default(),
+            next_id: ids.next(),
+            next_slide: slide_ids.next(),
+            nodes,
+            fragments,
         }))
     }
 
@@ -216,6 +273,14 @@ impl CompilerSnapshot {
 
     pub(super) fn dependencies(&self) -> &DependencyGraph {
         &self.0.dependencies
+    }
+
+    pub(super) fn nodes(&self) -> &[Arc<super::reuse::SemanticNode>] {
+        &self.0.nodes
+    }
+
+    pub(super) fn fragments(&self) -> &Mutex<static_html::FragmentCache> {
+        &self.0.fragments
     }
 
     pub(super) fn html(&self, options: RenderOptions) -> &static_html::HtmlCompilation {

@@ -12,7 +12,7 @@ fn html(source: &str) -> String {
     render_presentation(&presentation(source), |_| Ok(CellContent::source_only()))
         .unwrap()
         .into_iter()
-        .map(|slide| slide.html)
+        .map(|slide| slide.html.as_str().to_owned())
         .collect()
 }
 

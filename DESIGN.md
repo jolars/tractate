@@ -611,8 +611,9 @@ The two layers share generic Markdown containers, with source `Cell` leaves or
 slide, and cell IDs; source order; nesting; attributes; declarations; and source
 snapshots. Presentation, slide, cell-presentation, and result-slot origins add
 derivation steps without replacing source origins. Inspection traverses this
-presentation IR without executing code. Label-based identity assignment and
-previous-revision matching remain later work.
+presentation IR without executing code. Unchanged blocks retain their handles
+through previous-revision matching; deterministic label-based identity
+assignment remains later work.
 
 Do not make backend-specific HTML or Typst structures part of the primary
 document IR.
@@ -669,10 +670,34 @@ reads, process execution, and directory publication remain outside the graph in
 the effectful build layer; resource bytes are not inputs to HTML fragments at
 this stage.
 
-Each changed source currently rebuilds the presentation and graph. Matching
-semantic identities, reusing nodes and fragments across revisions, and reporting
-slide changes remain subsequent work. The graph records dependencies now; it
-does not yet skip queries after an edit.
+Each changed source is parsed and validated anew. The compiler matches
+document-level blocks against the preceding revision using their source text and
+complete lowered structure, with relative origins and locally normalized
+handles. Matches share an immutable semantic template, including its compiled
+result-slot placement, and retain the handles of nested blocks, inlines, and
+cells. Matching consumes each candidate once in source order, so repeated
+content retains distinct handles. New templates receive fresh handles that are
+never reassigned within the compiler. Templates retain isolated block sources
+rather than previous documents; the current presentation binds their origins to
+the requesting source snapshot.
+
+Title slides retain their live-session identity. Content slides retain theirs
+when their first block matches, preserving identity through body edits and
+moves. This is a best-effort matcher: changed boundary blocks or changed
+containers can receive new handles. Deterministic label-based identities and
+structural change sets remain subsequent work.
+
+Snapshots share a fragment cache keyed by slide identity. A fragment is reused
+when its semantic templates, or title scalar, and the effective cell policies
+and reference targets it actually read are unchanged. Both successful fragments
+and fragment diagnostics replay their recorded dependencies. HTML bytes share an
+allocation across revisions; resource and diagnostic origins are rebound per
+block, allowing changes to the gaps between unchanged blocks. Deck assembly
+still checks current diagnostics and required results before consulting
+fragments. It also recomputes the deck title and merges current resource
+requirements. Normal and `no_execute` preparation can share valid fragments
+while retaining separate deck outcomes. Updates prune cached entries for removed
+slide identities.
 
 Conceptually:
 
@@ -1215,9 +1240,10 @@ Each `RenderedSlide` retains its typed `SlideId`, HTML fragment, and an
 attribute encodes that semantic handle as `slide-N`. This attribute stays fixed
 when a retained slide changes content, source offsets, or position. It does not
 use heading text or source labels, so repeated headings receive distinct IDs.
-The attribute is scoped to the current compilation, just like `SlideId`.
-Retaining semantic IDs across reparsing still requires the compiler's planned
-label resolution and previous-revision matcher.
+The attribute is scoped to the current compilation, just like `SlideId`. The
+compiler retains these IDs across reparsing when its previous-revision matcher
+recognizes the slide boundary. Deterministic label-based identity assignment
+remains later work.
 
 During live preview, an edit to slide 17 should send only its new rendered
 representation to the browser.
@@ -1691,8 +1717,8 @@ carry `CellId`, and slides carry `SlideId`. Cloning source nodes and grouping
 them into slides preserves their IDs. Semantic IDs are allocated within a build
 scope, independently of source offsets or content hashes. Fresh full builds
 start new scopes, so their numeric handles must not be compared across builds.
-Label resolution and previous-revision matching will establish reuse across
-revisions.
+The compiler's previous-revision matcher retains unchanged templates and their
+handles across revisions. Deterministic label resolution remains later work.
 
 `ExecutionKey` and `ArtifactId` wrap separate 256-bit digests. Their
 constructors accept already computed digests; execution-input encoding, hash

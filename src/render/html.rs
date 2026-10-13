@@ -3,6 +3,7 @@
 #[cfg(test)]
 use crate::document::Presentation;
 use crate::document::{Origin, Slide, SlideId};
+use std::sync::Arc;
 
 mod content;
 mod directory;
@@ -16,7 +17,7 @@ pub(crate) use directory::{HtmlAsset, HtmlDirectory};
 pub(crate) struct RenderedSlide {
     pub id: SlideId,
     pub origin: Origin,
-    pub html: String,
+    pub html: Arc<String>,
 }
 
 /// Render one section per slide, in presentation order, including empty bodies.
@@ -50,6 +51,7 @@ fn render_section(slide: &Slide, body: String) -> RenderedSlide {
         html: format!(
             "<section data-slide-id=\"slide-{}\">\n{body}</section>\n",
             slide.id
-        ),
+        )
+        .into(),
     }
 }

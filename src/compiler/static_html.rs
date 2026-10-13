@@ -1,6 +1,7 @@
 //! Pure preparation of a source-only HTML deck and its resource dependencies.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 
 use super::queries::{DependencyGraph, QueryKey, Reads};
 
@@ -8,6 +9,106 @@ use crate::document::*;
 use crate::render::html::{self, CellContent, RenderedSlide};
 
 mod resources;
+
+pub(super) type FragmentCache = BTreeMap<SlideId, CachedFragment>;
+
+#[derive(Debug, PartialEq, Eq)]
+enum SlideInput {
+    Title(String, ScalarStyle),
+    Content(Vec<Arc<super::reuse::SemanticNode>>),
+}
+
+#[derive(Debug)]
+pub(super) struct CachedFragment {
+    slide: SlideInput,
+    policies: BTreeMap<CellId, DisplayOptions>,
+    references: BTreeMap<String, Option<html::ReferenceTarget>>,
+    reads: BTreeSet<QueryKey>,
+    origins: Vec<Origin>,
+    result: Result<(RenderedSlide, BTreeMap<String, Resource>), Diagnostic>,
+}
+
+fn slide_input(snapshot: &super::CompilerSnapshot, slide: &Slide) -> SlideInput {
+    match &slide.kind {
+        SlideKind::Title(title) => {
+            let YamlKind::Scalar { text, style } = &title.kind else {
+                unreachable!("title is a scalar")
+            };
+            SlideInput::Title(text.clone(), *style)
+        }
+        SlideKind::Content(blocks) => SlideInput::Content(
+            blocks
+                .iter()
+                .map(|block| {
+                    Arc::clone(
+                        snapshot
+                            .nodes()
+                            .iter()
+                            .find(|node| node.id() == block.id)
+                            .expect("semantic block template"),
+                    )
+                })
+                .collect(),
+        ),
+    }
+}
+
+fn slide_origins(slide: &Slide) -> Vec<Origin> {
+    match &slide.kind {
+        SlideKind::Title(title) => vec![title.origin.clone()],
+        SlideKind::Content(blocks) => blocks.iter().map(|block| block.origin.clone()).collect(),
+    }
+}
+
+impl CachedFragment {
+    fn bind(
+        &self,
+        slide: &Slide,
+    ) -> Result<(RenderedSlide, BTreeMap<String, Resource>), Diagnostic> {
+        let origins = slide_origins(slide);
+        let bind = |origin: &Origin| {
+            let range = origin.source_span().range();
+            let (index, previous) = self
+                .origins
+                .iter()
+                .enumerate()
+                .find(|(_, previous)| {
+                    let parent = previous.source_span().range();
+                    parent.start <= range.start && range.end <= parent.end
+                })
+                .expect("fragment origin belongs to a slide input");
+            let current = origins[index].source_span();
+            super::reuse::rebind_origin(
+                origin,
+                current.file(),
+                current.range().start as i128 - previous.source_span().range().start as i128,
+            )
+        };
+        match &self.result {
+            Ok((rendered, resources)) => {
+                let mut rendered = rendered.clone();
+                rendered.origin = slide.origin.derived("html-section");
+                let resources = resources
+                    .iter()
+                    .map(|(path, resource)| {
+                        let mut resource = resource.clone();
+                        resource.origin = bind(&resource.origin);
+                        (path.clone(), resource)
+                    })
+                    .collect();
+                Ok((rendered, resources))
+            }
+            Err(diagnostic) => {
+                let mut diagnostic = diagnostic.clone();
+                diagnostic.primary = bind(&diagnostic.primary);
+                for related in &mut diagnostic.related {
+                    related.origin = bind(&related.origin);
+                }
+                Err(diagnostic)
+            }
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub(crate) struct CompiledHtml {
@@ -159,26 +260,72 @@ fn compile_deck(
     let mut resources = BTreeMap::new();
     let mut slides = Vec::new();
     for slide in &presentation.slides {
-        let fragment = graph.query(QueryKey::HtmlSlide(slide.id), |reads| {
-            let mut resources = BTreeMap::new();
-            let rendered = html::render_slide(
-                reads.read(QueryKey::Slide(slide.id), slide),
-                |cell| {
-                    let options = reads.read(QueryKey::CellPolicy(cell.id), policies[&cell.id]);
-                    let mut content = CellContent::source_only();
-                    content.show_source = options.echo && options.include;
-                    Ok(content)
-                },
-                |label| {
-                    reads.read(
-                        QueryKey::Reference(label.to_owned()),
-                        references.get(label).cloned().flatten(),
-                    )
-                },
-                |destination, origin| resources::resolve(destination, origin, &mut resources),
-            )?;
-            Ok::<_, Diagnostic>((rendered, resources))
+        let key = QueryKey::HtmlSlide(slide.id);
+        let input = slide_input(snapshot, slide);
+        let mut cache = snapshot.fragments().lock().expect("fragment cache lock");
+        let cached = cache.get(&slide.id).filter(|cached| {
+            cached.slide == input
+                && cached
+                    .policies
+                    .iter()
+                    .all(|(id, policy)| policies.get(id) == Some(policy))
+                && cached
+                    .references
+                    .iter()
+                    .all(|(label, target)| references.get(label) == Some(target))
         });
+        let fragment = if let Some(cached) = cached {
+            graph.reuse(key.clone(), cached.reads.clone());
+            cached.bind(slide)
+        } else {
+            let fragment = graph.query(key.clone(), |reads| {
+                let mut resources = BTreeMap::new();
+                let rendered = html::render_slide(
+                    reads.read(QueryKey::Slide(slide.id), slide),
+                    |cell| {
+                        let options = reads.read(QueryKey::CellPolicy(cell.id), policies[&cell.id]);
+                        let mut content = CellContent::source_only();
+                        content.show_source = options.echo && options.include;
+                        Ok(content)
+                    },
+                    |label| {
+                        reads.read(
+                            QueryKey::Reference(label.to_owned()),
+                            references.get(label).cloned().flatten(),
+                        )
+                    },
+                    |destination, origin| resources::resolve(destination, origin, &mut resources),
+                )?;
+                Ok::<_, Diagnostic>((rendered, resources))
+            });
+            let reads = graph.inputs(&key).clone();
+            cache.insert(
+                slide.id,
+                CachedFragment {
+                    slide: input,
+                    policies: reads
+                        .iter()
+                        .filter_map(|key| match key {
+                            QueryKey::CellPolicy(id) => Some((*id, policies[id])),
+                            _ => None,
+                        })
+                        .collect(),
+                    references: reads
+                        .iter()
+                        .filter_map(|key| match key {
+                            QueryKey::Reference(label) => {
+                                Some((label.clone(), references[label].clone()))
+                            }
+                            _ => None,
+                        })
+                        .collect(),
+                    reads,
+                    origins: slide_origins(slide),
+                    result: fragment.clone(),
+                },
+            );
+            fragment
+        };
         let (rendered, required) = deck
             .read(QueryKey::HtmlSlide(slide.id), fragment)
             .map_err(|d| vec![d])?;
@@ -252,7 +399,7 @@ fn reference_queries(
         .collect()
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct DisplayOptions {
     eval: bool,
     echo: bool,

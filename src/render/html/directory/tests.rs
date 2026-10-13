@@ -25,7 +25,8 @@ fn slides() -> Vec<RenderedSlide> {
                     })
                     .unwrap(),
                 ),
-                html: format!("<section data-slide-id=\"slide-{id}\"><h2>{body}</h2></section>\n"),
+                html: format!("<section data-slide-id=\"slide-{id}\"><h2>{body}</h2></section>\n")
+                    .into(),
             }
         })
         .collect()
@@ -154,7 +155,7 @@ fn html_directory_is_deterministic_and_tracks_content_changes() {
     let original: Value =
         serde_json::from_slice(&fs::read(a.join("manifest.json")).unwrap()).unwrap();
     let mut revised = slides();
-    revised[1].html = revised[1].html.replace("Two", "Revised");
+    revised[1].html = revised[1].html.replace("Two", "Revised").into();
     HtmlDirectory::new("Title", &revised, &assets)
         .unwrap()
         .write(&b)

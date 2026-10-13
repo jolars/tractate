@@ -34,6 +34,15 @@ reads, release of unused revisions, and HTML preparation from current and
 retained snapshots. Rendered HTML, resource dependencies, and errors are
 compared with clean builds after each edit in both execution modes.
 
+`src/compiler/state/tests/reuse.rs` verifies shared semantic-template and HTML
+allocations across prose edits, slide moves, insertions, removals, and repeated
+content. Reference changes invalidate only slides that use the changed target,
+and default changes respect effective cell overrides. Reuse retains current
+resource and diagnostic origins after path and offset changes, rechecks
+execution requirements, and works when a retained snapshot first renders after
+an update. Every QMD fixture also exercises template reuse and complete origin
+rebinding with both LF and CRLF line endings.
+
 On Linux, `cli/common/process.rs` uses `strace` to follow process creation and
 exec calls, including failed attempts and descendants. Only the initial exec of
 the program under test is excluded. A control test deliberately launches a child

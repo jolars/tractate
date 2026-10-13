@@ -10,6 +10,7 @@ use crate::document::{
 
 mod presentation;
 mod queries;
+mod reuse;
 mod state;
 pub(crate) mod static_html;
 mod validation;

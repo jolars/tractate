@@ -42,8 +42,12 @@ tree and inspection diagnostics, and remain valid after later updates. These
 operations perform no filesystem access or execution. An internal graph tracks
 dependencies through semantic blocks, slides, and HTML fragments, including
 reference lookups and cell display policies. HTML preparation is lazy and shared
-within each snapshot. Changed input currently rebuilds the complete tree and
-graph; identity matching and reuse across edits remain roadmap items.
+within each snapshot. Across revisions, unchanged blocks share semantic
+templates and retain their node and cell IDs. Slides retain their IDs when their
+boundary block matches. HTML fragments are reused when their slide content and
+the cell policies and references they read remain unchanged. Origins always
+resolve against the source for the requesting snapshot. Parsing and validation
+still run after every changed input.
 
 Render a source-only presentation with:
 
@@ -94,9 +98,9 @@ result content are supplied separately, without execution. Its directory writer
 publishes complete decks atomically, with a SHA-256 content manifest, supplied
 local assets, and exact-version CDN references to Reveal.js and KaTeX. Viewing
 requires network access. Atomic publication is supported on Linux, Android, and
-Apple platforms when the filesystem supports directory exchange. Identity
-matching across revisions remains a roadmap item. The planned execution and
-rendering behavior is described in [DESIGN.md](DESIGN.md).
+Apple platforms when the filesystem supports directory exchange. Deterministic
+label-based identities and structural change sets remain roadmap items. The
+planned execution and rendering behavior is described in [DESIGN.md](DESIGN.md).
 
 ## Development
 
