@@ -528,8 +528,31 @@ Explicit Markdown identifier attributes and cell `label` values share one
 case-sensitive document namespace. Duplicate labels report the later declaration
 and relate it to the first declaration in QMD order, including labels in nested
 content, other slides or sessions, and disabled or hidden cells. Quoting and
-escapes do not distinguish otherwise identical labels. Semantic identity
-assignment and effective option resolution remain subsequent work.
+escapes do not distinguish otherwise identical labels. Validation retains each
+supported label's owning node for semantic identity assignment before planning.
+
+Unique identifier attributes give blocks and inlines deterministic `NodeId`
+values. A unique cell `label` gives both its block a `NodeId` and its executable
+cell a `CellId`. A content slide takes its deterministic `SlideId` from the
+label on its first block, including a level-two boundary heading or labeled
+leading body content. When a node has multiple identifier declarations, its
+first declaration in source order determines its identity.
+
+These typed identities use a versioned SHA-256 digest of the decoded,
+case-sensitive label, tagged separately from allocated anonymous handles. Paths,
+offsets, content, and source revisions do not enter label identities. Labeled
+entities retain their identities through content edits and moves, across clean
+builds of the same document, and after removal and reintroduction. Labels remain
+document scoped; equal labels in unrelated documents do not establish entity
+equivalence. Invalid or unsupported label declarations receive anonymous
+handles. Duplicate labels do not supply deterministic handles, so invalid input
+never aliases graph keys. Repair restores deterministic identities. Valid
+declarations retain their identities during unrelated syntax errors.
+
+Semantic identity does not establish computation validity. Renaming a cell label
+changes its semantic identity without changing its execution key. Editing its
+code preserves a labeled identity while invalidating computation according to
+the execution inputs and predecessor state.
 
 The internal presentation model exposes slides explicitly and shares Markdown
 structure between source cells and presentation cells:
@@ -612,9 +635,9 @@ The two layers share generic Markdown containers, with source `Cell` leaves or
 slide, and cell IDs; source order; nesting; attributes; declarations; and source
 snapshots. Presentation, slide, cell-presentation, and result-slot origins add
 derivation steps without replacing source origins. Inspection traverses this
-presentation IR without executing code. Unchanged blocks retain their handles
-through previous-revision matching; deterministic label-based identity
-assignment remains later work.
+presentation IR without executing code. Labeled nodes retain deterministic
+identities, while unchanged anonymous blocks retain their handles through
+previous-revision matching.
 
 Do not make backend-specific HTML or Typst structures part of the primary
 document IR.
@@ -684,16 +707,33 @@ complete lowered structure, with relative origins and locally normalized
 handles. Matches share an immutable semantic template, including its compiled
 result-slot placement, and retain the handles of nested blocks, inlines, and
 cells. Matching consumes each candidate once in source order, so repeated
-content retains distinct handles. New templates receive fresh handles that are
-never reassigned within the compiler. Templates retain isolated block sources
-rather than previous documents; the current presentation binds their origins to
-the requesting source snapshot.
+content retains distinct handles. New templates use deterministic label handles
+or fresh anonymous handles that are never reassigned within the compiler.
+Templates retain isolated block sources rather than previous documents; the
+current presentation binds their origins to the requesting source snapshot.
 
-Title slides retain their live-session identity. Content slides retain theirs
-when their first block matches, preserving identity through body edits and
-moves. This is a best-effort matcher: changed boundary blocks or changed
-containers can receive new handles. Deterministic label-based identities remain
-subsequent work.
+Identity matching and content reuse are separate decisions. A template is reused
+only when its source, complete lowered structure, and assigned identities match.
+A labeled node can retain its identity while its changed content requires a new
+template and rendered fragment. Adding or removing a duplicate declaration also
+rechecks assignments in otherwise unchanged templates.
+
+Title slides retain their live-session identity. Anonymous content slides retain
+theirs when their first block matches, preserving identity through body edits
+and moves. Anonymous cells additionally match against cell blocks throughout the
+preceding revision, independently of their containing top-level template. An
+unchanged cell inside an edited quote, list, or div can therefore retain both
+its block and cell handles. Cell matching compares exact source and complete
+lowered structure with relative origins and normalized handles, consuming each
+candidate once in source order. Repeated identical cells remain distinct.
+
+This matcher is best effort: it does not infer an author's intent when identical
+occurrences are inserted, removed, or moved. Source-order matching determines
+which indistinguishable occurrence survives. Edited anonymous cells, changed
+anonymous slide boundaries, and cells whose container syntax changes can receive
+fresh handles. Only the immediately preceding revision participates; removed
+anonymous entities receive fresh handles when reintroduced. Explicit labels
+provide deterministic identities when these limits matter.
 
 `update_source_with_changes` returns a `SourceUpdate` with the previous and new
 revisions and an explicit `SlideChangeSet`. The existing `update_source` method
@@ -1450,13 +1490,12 @@ destinations unchanged.
 
 Each `RenderedSlide` retains its typed `SlideId`, HTML fragment, and an
 `html-section` origin derived from the presentation slide. Its `data-slide-id`
-attribute encodes that semantic handle as `slide-N`. This attribute stays fixed
-when a retained slide changes content, source offsets, or position. It does not
-use heading text or source labels, so repeated headings receive distinct IDs.
-The attribute is scoped to the current compilation, just like `SlideId`. The
-compiler retains these IDs across reparsing when its previous-revision matcher
-recognizes the slide boundary. Deterministic label-based identity assignment
-remains later work.
+attribute encodes an anonymous handle as `slide-N` or a labeled handle as
+`slide-label-DIGEST`. This attribute stays fixed when a retained slide changes
+content, source offsets, or position. Repeated anonymous headings receive
+distinct IDs. Anonymous attributes are scoped to their compiler and retain their
+IDs when the previous-revision matcher recognizes the boundary. Labeled
+attributes remain deterministic across builds of the same document.
 
 During live preview, an edit to slide 17 should send only its new rendered
 representation to the browser.
@@ -1927,11 +1966,13 @@ Do not conflate three different identities:
 The internal `document::identity` module defines five opaque newtypes with no
 conversions between identity domains. Blocks and inlines carry `NodeId`, cells
 carry `CellId`, and slides carry `SlideId`. Cloning source nodes and grouping
-them into slides preserves their IDs. Semantic IDs are allocated within a build
-scope, independently of source offsets or content hashes. Fresh full builds
-start new scopes, so their numeric handles must not be compared across builds.
-The compiler's previous-revision matcher retains unchanged templates and their
-handles across revisions. Deterministic label resolution remains later work.
+them into slides preserves their IDs. Anonymous semantic IDs are allocated
+within a compiler scope, independently of source offsets or content hashes.
+Fresh full builds start new scopes, so their anonymous handles must not be
+compared across builds. The compiler's previous-revision matcher retains
+unchanged templates and their handles across revisions. Unique labels supply
+deterministic identities in a separate tagged domain, with the rules described
+under source semantics and incremental compilation.
 
 `ExecutionKey` and `ArtifactId` wrap separate 256-bit digests. Their
 constructors accept already computed digests. The keyed evaluation pass hashes
@@ -2031,12 +2072,13 @@ Invalidation and retries retain the last accepted success separately from
 reusable results, including its artifact bytes. A preview can display this
 fallback only with an explicit stale status and current diagnostics. Failed,
 provisional, and obsolete output never enters these views. Successful
-replacement retires the fallback. Retention follows existing `CellId` matching,
-so cells that receive new handles have no inferred fallback; deterministic
-label-based matching remains later work. Removed and disabled cells lose their
-views and retained output. The `no_execute` view policy reports missing pending
-results as unavailable and does not authorize or interrupt execution. Persistent
-cache lookup and complete one-shot result enforcement remain orchestration work.
+replacement retires the fallback. Retention follows `CellId` identity: labeled
+cells retain their handles through edits, while anonymous cells use the
+previous-revision matcher. Cells that receive new handles have no inferred
+fallback. Removed and disabled cells lose their views and retained output. The
+`no_execute` view policy reports missing pending results as unavailable and does
+not authorize or interrupt execution. Persistent cache lookup and complete
+one-shot result enforcement remain orchestration work.
 
 --------------------------------------------------------------------------------
 

@@ -4,7 +4,24 @@ use std::collections::HashMap;
 
 use crate::document::*;
 
+#[cfg(test)]
 pub(super) fn validate(document: &SourceDocument) -> Vec<Diagnostic> {
+    declarations(document).diagnostics
+}
+
+pub(super) struct Declarations {
+    pub diagnostics: Vec<Diagnostic>,
+    pub labels: Vec<LabelDeclaration>,
+}
+
+pub(super) struct LabelDeclaration {
+    pub label: String,
+    pub origin: Origin,
+    pub node: NodeId,
+    pub cell: Option<CellId>,
+}
+
+pub(super) fn declarations(document: &SourceDocument) -> Declarations {
     let mut validator = Validator::default();
     let mut attributes = Vec::new();
     let mut defaults = HashMap::new();
@@ -13,27 +30,30 @@ pub(super) fn validate(document: &SourceDocument) -> Vec<Diagnostic> {
     }
     document.visit_nodes(
         &mut |block| {
-            validator.attributes(&block.attributes);
+            validator.attributes(&block.attributes, block.id);
             match &block.kind {
-                BlockKind::Cell(cell) => validator.cell(cell),
+                BlockKind::Cell(cell) => validator.cell(cell, block.id),
                 BlockKind::Metadata(metadata) => validator.metadata(metadata, &mut defaults),
                 _ => {}
             }
         },
-        &mut |inline| attributes.extend(inline.attributes.iter().cloned()),
+        &mut |inline| attributes.push((inline.attributes.clone(), inline.id)),
     );
-    validator.attributes(&attributes);
+    for (attributes, node) in attributes {
+        validator.attributes(&attributes, node);
+    }
     // Inline attributes and cell options are gathered by separate visitors.
     // Sort declarations so every duplicate points to the first QMD occurrence.
     validator
         .labels
-        .sort_by_key(|(_, origin)| origin.source_span().range().start);
+        .sort_by_key(|label| label.origin.source_span().range().start);
     let mut labels = HashMap::new();
-    for (label, origin) in std::mem::take(&mut validator.labels) {
+    let declarations = std::mem::take(&mut validator.labels);
+    for label in &declarations {
         validator.unique(
             &mut labels,
-            &label,
-            &origin,
+            &label.label,
+            &label.origin,
             DiagnosticCode::DuplicateLabel,
             "label",
         );
@@ -41,13 +61,16 @@ pub(super) fn validate(document: &SourceDocument) -> Vec<Diagnostic> {
     validator
         .diagnostics
         .sort_by_key(|d| d.primary.source_span().range().start);
-    validator.diagnostics
+    Declarations {
+        diagnostics: validator.diagnostics,
+        labels: declarations,
+    }
 }
 
 #[derive(Default)]
 struct Validator {
     diagnostics: Vec<Diagnostic>,
-    labels: Vec<(String, Origin)>,
+    labels: Vec<LabelDeclaration>,
 }
 
 impl Validator {
@@ -87,10 +110,15 @@ impl Validator {
         }
     }
 
-    fn attributes(&mut self, attributes: &[Attribute]) {
+    fn attributes(&mut self, attributes: &[Attribute], node: NodeId) {
         for attribute in attributes {
             if let AttributeKind::Identifier(label) = &attribute.kind {
-                self.labels.push((label.clone(), attribute.origin.clone()));
+                self.labels.push(LabelDeclaration {
+                    label: label.clone(),
+                    origin: attribute.origin.clone(),
+                    node,
+                    cell: None,
+                });
             }
         }
     }
@@ -107,13 +135,13 @@ impl Validator {
                         "option",
                     );
                     self.yaml_syntax(&entry.key);
-                    self.options(&entry.value, true);
+                    self.options(&entry.value, None);
                 }
             }
         }
     }
 
-    fn cell(&mut self, cell: &Cell) {
+    fn cell(&mut self, cell: &Cell, node: NodeId) {
         for option in &cell.options {
             if option.source == OptionSource::Inline {
                 self.error(
@@ -124,11 +152,12 @@ impl Validator {
             }
         }
         if let Some(preamble) = &cell.preamble {
-            self.options(preamble, false);
+            self.options(preamble, Some((node, cell.id)));
         }
     }
 
-    fn options(&mut self, value: &YamlValue, defaults: bool) {
+    fn options(&mut self, value: &YamlValue, target: Option<(NodeId, CellId)>) {
+        let defaults = target.is_none();
         self.yaml_syntax(value);
         let Some(entries) = value.mapping() else {
             // Unsupported syntax has already received a precise diagnostic.
@@ -177,7 +206,13 @@ impl Validator {
                         && entry.value.properties.is_empty() =>
                 {
                     if let Some(label) = name(&entry.value) {
-                        self.labels.push((label, entry.value.origin.clone()));
+                        let (node, cell) = target.expect("cell label scope");
+                        self.labels.push(LabelDeclaration {
+                            label,
+                            origin: entry.value.origin.clone(),
+                            node,
+                            cell: Some(cell),
+                        });
                     } else if !matches!(entry.value.kind, YamlKind::Unsupported(_)) {
                         self.error(DiagnosticCode::InvalidLabel, &entry.value.origin, "`label` must be a nonempty string without whitespace or control characters");
                     }

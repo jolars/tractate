@@ -336,11 +336,31 @@ fn evaluation_keys_are_independent_of_revisions_positions_and_semantic_handles()
         if !edit.is_empty() {
             assert_eq!(keys(&current), keys(&original));
         }
+        if edit.contains("label: renamed") {
+            assert_ne!(
+                current.cells()[2].cell.cell_id,
+                original.cells()[2].cell.cell_id
+            );
+        }
     }
     let current = compiler.snapshot();
-    assert_ne!(
+    assert_eq!(
         current.evaluation_plan().unwrap().cells[0].cell_id,
         original.cells()[0].cell.cell_id
+    );
+
+    let anonymous = "```{r}\n1\n```\n";
+    let mut compiler = Compiler::new(SourceFile::anonymous(anonymous));
+    let old = compiler.snapshot();
+    compiler.update_source(SourceFile::anonymous(""));
+    compiler.update_source(SourceFile::anonymous(anonymous));
+    let restored = compiler.snapshot();
+    let old = old.evaluation_plan().unwrap();
+    let restored = restored.evaluation_plan().unwrap();
+    assert_ne!(old.cells[0].cell_id, restored.cells[0].cell_id);
+    assert_eq!(
+        keys(&old.keyed(&inputs(old)).unwrap()),
+        keys(&restored.keyed(&inputs(restored)).unwrap())
     );
 }
 

@@ -34,14 +34,15 @@ pub struct SlideMove {
 /// Modification compares title scalars or the slide's ordered semantic block
 /// templates, excluding source paths, offsets, and gaps between blocks. It does
 /// not describe backend output invalidation from document defaults, reference
-/// definitions elsewhere, themes, or computation results. The existing identity
-/// matcher may assign a new handle to an edited boundary block; such a slide is
-/// removed and inserted rather than modified. Repeated identical boundaries
-/// match in occurrence order, so their identities are best effort.
+/// definitions elsewhere, themes, or computation results. Labeled boundaries
+/// retain deterministic identities through edits. The matcher may assign a new
+/// handle to an edited anonymous boundary; such a slide is removed and inserted
+/// rather than modified. Repeated identical anonymous boundaries match in
+/// occurrence order, so their identities are best effort.
 ///
 /// These lists describe differences, not sequential patch instructions. Use
-/// `order` to reconstruct the complete new order. Handles belong to the owning
-/// compiler and cannot be compared across independent compiler instances.
+/// `order` to reconstruct the complete new order. Anonymous handles belong to
+/// the owning compiler; labeled handles are deterministic within the document.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SlideChangeSet {
     pub inserted: Vec<SlidePosition>,

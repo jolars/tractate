@@ -5,6 +5,8 @@ use std::sync::Arc;
 
 use crate::document::*;
 
+mod identities;
+
 /// Cached lowering uses an isolated block source, so templates retain neither
 /// a whole previous document nor offsets that belong to another revision.
 #[derive(Debug, PartialEq, Eq)]
@@ -40,7 +42,9 @@ pub(super) fn semantic_nodes(
     blocks: &mut [Block],
     previous: &[Arc<SemanticNode>],
     ids: &SemanticIds,
+    labels: &[super::validation::LabelDeclaration],
 ) -> Vec<Arc<SemanticNode>> {
+    let identities = identities::match_identities(blocks, previous, labels);
     let mut available: BTreeMap<String, Vec<&Arc<SemanticNode>>> = BTreeMap::new();
     for node in previous.iter().rev() {
         available
@@ -52,12 +56,13 @@ pub(super) fn semantic_nodes(
         .iter_mut()
         .map(|block| {
             let text = block.origin.source_span().text().to_owned();
+            let assigned = identities.local(block);
             let candidates = available.entry(text.clone()).or_default();
             let mut found = None;
             for (index, candidate) in candidates.iter().enumerate().rev() {
                 let normalized =
                     normalize(block, candidate.source.origin.source_span().file().clone());
-                if normalized == candidate.source {
+                if normalized == candidate.source && assigned.matches(candidate) {
                     found = Some(index);
                     break;
                 }
@@ -72,6 +77,7 @@ pub(super) fn semantic_nodes(
                     ids,
                     nodes: &mut nodes,
                     cells: &mut cells,
+                    assigned: &assigned,
                 });
                 let presented = super::presentation::lower_block(source.clone());
                 Arc::new(SemanticNode {
@@ -104,16 +110,31 @@ struct Allocate<'a> {
     ids: &'a SemanticIds,
     nodes: &'a mut BTreeMap<NodeId, NodeId>,
     cells: &'a mut BTreeMap<CellId, CellId>,
+    assigned: &'a identities::Identities,
 }
 
 impl Transform for Allocate<'_> {
     fn origin(&mut self, _: &mut Origin) {}
     fn span(&mut self, _: &mut SourceSpan) {}
     fn node(&mut self, id: &mut NodeId) {
-        self.nodes.entry(*id).or_insert_with(|| self.ids.node());
+        self.nodes.entry(*id).or_insert_with(|| {
+            self.assigned
+                .nodes
+                .get(id)
+                .copied()
+                .flatten()
+                .unwrap_or_else(|| self.ids.node())
+        });
     }
     fn cell(&mut self, id: &mut CellId) {
-        self.cells.entry(*id).or_insert_with(|| self.ids.cell());
+        self.cells.entry(*id).or_insert_with(|| {
+            self.assigned
+                .cells
+                .get(id)
+                .copied()
+                .flatten()
+                .unwrap_or_else(|| self.ids.cell())
+        });
     }
 }
 

@@ -56,7 +56,7 @@ fn canonical_plan(plan: &crate::EvaluationPlan) -> Vec<crate::PlannedCell> {
     cells
 }
 
-fn assert_full_build(snapshot: &CompilerSnapshot, context: &str) {
+pub(super) fn assert_full_build(snapshot: &CompilerSnapshot, context: &str) {
     // Bypass semantic-template reuse entirely for the semantic oracle.
     let lowered = parser::lower(snapshot.source().clone());
     let full = crate::compiler::presentation::lower_presentation(

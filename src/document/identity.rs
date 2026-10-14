@@ -4,30 +4,92 @@ use std::cell::Cell;
 use std::fmt;
 
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+
+/// Tagged domains keep deterministic labels separate from allocated handles.
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[serde(untagged)]
+enum SemanticId {
+    Anonymous(u64),
+    Label([u8; 32]),
+}
+
+impl SemanticId {
+    fn label(label: &str) -> Self {
+        let mut hash = Sha256::new();
+        hash.update(b"tractate-semantic-label-v1\0");
+        hash.update(label.as_bytes());
+        Self::Label(hash.finalize().into())
+    }
+
+    fn is_labeled(self) -> bool {
+        matches!(self, Self::Label(_))
+    }
+}
 
 /// A block or inline entity within a compilation's semantic identity scope.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(crate) struct NodeId(u64);
+pub(crate) struct NodeId(SemanticId);
+
+impl NodeId {
+    pub fn labeled(label: &str) -> Self {
+        Self(SemanticId::label(label))
+    }
+
+    pub fn is_labeled(self) -> bool {
+        self.0.is_labeled()
+    }
+}
 
 /// A slide entity, independent of its heading, position, or rendered bytes.
 ///
-/// Compare handles only within one compiler instance. Independent full builds
-/// allocate unrelated handles, and removed handles are never reassigned.
+/// Labeled handles are deterministic across builds of the same document.
+/// Compare anonymous handles only within one compiler instance; removed
+/// anonymous handles are never reassigned. Labels are document scoped.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct SlideId(u64);
+pub struct SlideId(SemanticId);
+
+impl SlideId {
+    pub(crate) fn labeled(label: &str) -> Self {
+        Self(SemanticId::label(label))
+    }
+}
 
 impl fmt::Display for SlideId {
     /// Format the semantic handle within its compilation scope.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.0.fmt(formatter)
+        match self.0 {
+            SemanticId::Anonymous(id) => id.fmt(formatter),
+            SemanticId::Label(digest) => {
+                formatter.write_str("label-")?;
+                for byte in digest {
+                    write!(formatter, "{byte:02x}")?;
+                }
+                Ok(())
+            }
+        }
     }
 }
 
 /// An executable cell entity, independent of its computation's reuse key.
+///
+/// Labels give deterministic, document-scoped identities across full builds.
+/// Anonymous identities are matched only against the preceding revision of
+/// their owning compiler. Neither kind establishes computation validity.
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct CellId(u64);
+pub struct CellId(SemanticId);
 
-/// Allocates semantic handles without deriving them from source or output bytes.
+impl CellId {
+    pub(crate) fn labeled(label: &str) -> Self {
+        Self(SemanticId::label(label))
+    }
+
+    pub(crate) fn is_labeled(self) -> bool {
+        self.0.is_labeled()
+    }
+}
+
+/// Allocates anonymous semantic handles independently of source or output bytes.
 ///
 /// Handles are unique within this allocator's scope. Fresh full builds start a
 /// new scope; values from separate scopes must not be compared. Retaining IDs
@@ -49,15 +111,15 @@ impl SemanticIds {
     }
 
     pub fn node(&self) -> NodeId {
-        NodeId(self.allocate())
+        NodeId(SemanticId::Anonymous(self.allocate()))
     }
 
     pub fn slide(&self) -> SlideId {
-        SlideId(self.allocate())
+        SlideId(SemanticId::Anonymous(self.allocate()))
     }
 
     pub fn cell(&self) -> CellId {
-        CellId(self.allocate())
+        CellId(SemanticId::Anonymous(self.allocate()))
     }
 
     fn allocate(&self) -> u64 {
@@ -155,5 +217,34 @@ mod tests {
         assert_eq!(artifact, ArtifactId::from_digest([2; 32]));
         assert_ne!(key, ExecutionKey::from_digest([3; 32]));
         assert_ne!(artifact, ArtifactId::from_digest([3; 32]));
+    }
+
+    #[test]
+    fn identity_labels_are_deterministic_and_separate_from_anonymous_handles() {
+        let ids = SemanticIds::default();
+        let node = NodeId::labeled("name");
+        let cell = CellId::labeled("name");
+        assert_eq!(node, NodeId::labeled("name"));
+        assert_eq!(cell, CellId::labeled("name"));
+        assert_ne!(node, NodeId::labeled("Name"));
+        assert_ne!(node, ids.node());
+        assert_ne!(cell, ids.cell());
+        assert_ne!(SlideId::labeled("name"), ids.slide());
+        assert_eq!(
+            SlideId::labeled("name").to_string(),
+            "label-f46909ebb351d04d9814f437e2f19b10320f9b1d3f12d389dc81d7e2eb480682"
+        );
+    }
+
+    #[test]
+    fn identity_cell_handles_round_trip_in_execution_records() {
+        for cell in [SemanticIds::default().cell(), CellId::labeled("café")] {
+            let encoded = serde_json::to_string(&cell).unwrap();
+            assert_eq!(serde_json::from_str::<CellId>(&encoded).unwrap(), cell);
+        }
+        assert_eq!(
+            serde_json::from_str::<CellId>("0").unwrap(),
+            SemanticIds::default().cell()
+        );
     }
 }

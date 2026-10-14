@@ -1,5 +1,6 @@
 //! Revision ownership and immutable compiler snapshots for a single document.
 
+use std::collections::BTreeMap;
 use std::fmt;
 use std::path::Path;
 use std::sync::{Arc, Mutex, OnceLock};
@@ -7,7 +8,8 @@ use std::sync::{Arc, Mutex, OnceLock};
 use serde::{Deserialize, Serialize};
 
 use crate::document::{
-    Diagnostic, DocumentInspection, Presentation, SemanticIds, SlideKind, SourceFile,
+    Diagnostic, DocumentInspection, NodeId, Presentation, SemanticIds, SlideId, SlideKind,
+    SourceFile,
 };
 use crate::parser;
 
@@ -172,10 +174,22 @@ impl CompilerSnapshot {
         let mut lowered = dependencies.query(QueryKey::SourceDocument, |reads| {
             parser::lower(reads.read(QueryKey::Source, source.clone()))
         });
+        let parse_errors = lowered.error_count();
+        let (diagnostics, labels) = dependencies.query(QueryKey::SourceDiagnostics, |reads| {
+            let mut diagnostics = reads.read(QueryKey::SourceDocument, lowered.diagnostics);
+            let declarations = super::validation::declarations(
+                reads.read(QueryKey::SourceDocument, &lowered.document),
+            );
+            if parse_errors == 0 {
+                diagnostics.extend(declarations.diagnostics);
+            }
+            (diagnostics, declarations.labels)
+        });
         let nodes = super::reuse::semantic_nodes(
             &mut lowered.document.blocks,
             previous.map_or(&[], |previous| &previous.0.nodes),
             &ids,
+            &labels,
         );
         dependencies.query(QueryKey::Metadata, |reads| {
             reads.read(QueryKey::SourceDocument, &lowered.document.metadata)
@@ -194,17 +208,7 @@ impl CompilerSnapshot {
                 block
             });
         });
-        let parse_errors = lowered.error_count();
         let inspection_reads = super::queries::Reads::default();
-        let diagnostics = dependencies.query(QueryKey::SourceDiagnostics, |reads| {
-            let mut diagnostics = reads.read(QueryKey::SourceDocument, lowered.diagnostics);
-            if parse_errors == 0 {
-                diagnostics.extend(super::validation::validate(
-                    reads.read(QueryKey::SourceDocument, &lowered.document),
-                ));
-            }
-            diagnostics
-        });
         let evaluation_plan =
             super::evaluation::lower(&lowered.document, revision, &diagnostics, &mut dependencies);
         let mut grouped = dependencies.query(QueryKey::SlideLayout, |reads| {
@@ -214,7 +218,24 @@ impl CompilerSnapshot {
             .into_iter()
             .flat_map(|previous| &previous.presentation().slides)
             .collect();
+        let labeled_slides: BTreeMap<_, _> = labels
+            .iter()
+            .map(|label| {
+                (
+                    NodeId::labeled(&label.label),
+                    SlideId::labeled(&label.label),
+                )
+            })
+            .collect();
         for slide in &mut grouped.slides {
+            if let SlideKind::Content(blocks) = &slide.kind
+                && let Some(&id) = blocks
+                    .first()
+                    .and_then(|block| labeled_slides.get(&block.id))
+            {
+                slide.id = id;
+                continue;
+            }
             let matched = old_slides
                 .iter()
                 .position(|old| match (&old.kind, &slide.kind) {

@@ -87,7 +87,7 @@ introduced.
 - [x] Keep `NodeId`/`SlideId`/`CellId`, `ExecutionKey`, and `ArtifactId` as
   distinct types.
 - [x] Enforce document-scoped unique labels and report unsupported options.
-- [ ] Give labeled nodes deterministic semantic identities; define a best-effort
+- [x] Give labeled nodes deterministic semantic identities; define a best-effort
   previous-revision matcher for unlabeled slides and cells.
 
 ### 1.3 Render static HTML

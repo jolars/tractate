@@ -3,6 +3,7 @@ use crate::compiler::{RenderOptions, static_html};
 use crate::document::{DiagnosticCode, SourceRange};
 
 mod dependencies;
+mod identities;
 mod oracle;
 mod reuse;
 

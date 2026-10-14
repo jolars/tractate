@@ -124,9 +124,12 @@ result content are supplied separately, without execution. Its directory writer
 publishes complete decks atomically, with a SHA-256 content manifest, supplied
 local assets, and exact-version CDN references to Reveal.js and KaTeX. Viewing
 requires network access. Atomic publication is supported on Linux, Android, and
-Apple platforms when the filesystem supports directory exchange. Deterministic
-label-based identities and structural change sets remain roadmap items. The
-planned execution and rendering behavior is described in [DESIGN.md](DESIGN.md).
+Apple platforms when the filesystem supports directory exchange. Unique source
+labels give nodes, cells, and slide boundaries deterministic semantic IDs.
+Unlabeled slides and cells use best-effort matching against the preceding
+revision. The compiler reports inserted, removed, reordered, and modified slides
+through structural change sets. The matching rules and planned execution and
+rendering behavior are described in [DESIGN.md](DESIGN.md).
 
 ## Development
 
