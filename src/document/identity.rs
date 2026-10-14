@@ -3,6 +3,8 @@
 use std::cell::Cell;
 use std::fmt;
 
+use serde::{Deserialize, Serialize};
+
 /// A block or inline entity within a compilation's semantic identity scope.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) struct NodeId(u64);
@@ -22,7 +24,7 @@ impl fmt::Display for SlideId {
 }
 
 /// An executable cell entity, independent of its computation's reuse key.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct CellId(u64);
 
 /// Allocates semantic handles without deriving them from source or output bytes.
@@ -72,7 +74,7 @@ impl SemanticIds {
 ///
 /// The execution planner supplies the digest after encoding all relevant inputs.
 /// There are no conversions from semantic IDs or artifact IDs.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ExecutionKey([u8; 32]);
 
 impl ExecutionKey {

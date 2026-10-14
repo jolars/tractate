@@ -1310,9 +1310,13 @@ For example:
 ```text
 .tractate/
   cache/
-    objects/
-      ab/
-        abcdef...
+    writer.lock
+    v1/
+      objects/
+        ab/
+          abcdef...
+      results/
+        <execution-key>
 ```
 
 References from execution results should use artifact IDs rather than temporary
@@ -1336,6 +1340,33 @@ single-writer rule, and garbage-collection roots for current results and active
 builds. Corrupt or incompatible entries should be treated as cache misses, not
 fatal compiler errors. A project-local cache is sufficient initially; a shared
 global store can be considered later.
+
+`ExecutionStore::open` creates a versioned project-local store and holds an
+exclusive, nonblocking file lock until the handle is dropped. The coordinator's
+`with_store` constructor enables persistent publication. Artifact events stage
+objects under their SHA-256 digest. Before publication, the store replaces
+attempt-local artifact aliases in display bundles with content addresses and
+verifies that every reference resolves to staged bytes. Accepted records retain
+the ordered events, diagnostics and their source snapshots, and execution
+provenance. An integrity envelope protects each versioned result record, which
+references objects without duplicating their bytes.
+
+The store writes temporary files beside their destinations, flushes their
+contents, and publishes each object or result record with one atomic rename. The
+result record becomes visible only after the coordinator validates the
+completion and confirms runner acceptance and state. Failed publication leaves
+no newly accepted result or verified session state. Replay preserves existing
+logical records, and volatile executions do not publish reusable records.
+
+`ExecutionStore::load` verifies the record's schema, integrity, success status,
+execution key, event identities, artifact references, and object digests.
+Missing, unreadable, partial, corrupt, and incompatible entries return a cache
+miss. Lookup does not execute code or restore interpreter state. Cache policy
+and reattachment to a current compiler remain explicit caller decisions;
+retained dispatch identities belong to the original compiler and coordinator.
+Result records and active attempts identify the objects that future garbage
+collection must retain. Rejected attempts can leave unreferenced objects, and
+the current store does not collect them.
 
 --------------------------------------------------------------------------------
 
@@ -1970,21 +2001,22 @@ the source revision, execution key, predecessor-state key, and attempt ID. Only
 a current request may commit a result or advance a session's materialized state
 key. A stale completion is discarded.
 
-`ExecutionCoordinator` currently implements this acceptance boundary in memory
-using the `ExecutionRunner` adapter contract and the counting fake runner.
-Reconciliation retains matching logical results, replaces pending work with the
-current keyed plan, and revokes older running attempts. Graceful interruption
-does not release a concurrency slot until the attempt terminates. Explicit
-forced cleanup handles runners that ignore interruption; cleanup failures keep
-their slots occupied.
+`ExecutionCoordinator` implements this acceptance boundary using the
+`ExecutionRunner` adapter contract, an optional `ExecutionStore`, and the
+counting fake runner. Reconciliation retains matching logical results, replaces
+pending work with the current keyed plan, and revokes older running attempts.
+Graceful interruption does not release a concurrency slot until the attempt
+terminates. Explicit forced cleanup handles runners that ignore interruption;
+cleanup failures keep their slots occupied.
 
 The coordinator validates dispatch identities, runner incarnations, and the
 complete ordered event stream before accepting success. Failed, cancelled,
 stale, and protocol-invalid attempts leave no verified interpreter state.
 Further execution starts a fresh incarnation and replays the current valid
 prefix. Replay advances physical state without replacing retained logical prefix
-outputs. Accepted artifact bytes remain provisional in memory; content-addressed
-storage and atomic persistent publication remain later work.
+outputs. With a store, artifacts remain provisional until an atomic result
+record commits them after all publication checks pass. Without a store, accepted
+results remain in memory.
 
 --------------------------------------------------------------------------------
 

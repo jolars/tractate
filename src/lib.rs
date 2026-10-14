@@ -23,7 +23,8 @@ pub use execution::{
     AcceptedExecution, ArtifactId, ArtifactReference, AttemptId, AttemptReport,
     CompletionDisposition, CoordinatorError, DisplayBundle, DisplayRepresentation,
     ExecutionCoordinator, ExecutionOutcome, ExecutionProvenance, ExecutionRequest, ExecutionRunner,
-    ExecutionStatus, FakeArtifact, FakeCompletion, FakeRunner, FakeRunnerError, FakeRunnerEvent,
-    FakeRunnerState, FakeScript, FakeStep, OutputEvent, OutputPayload, ProvisionalArtifact,
-    RejectionReason, RepresentationKind, RunnerEvent, RunnerIdentity, SessionId, StateKey,
+    ExecutionStatus, ExecutionStore, FakeArtifact, FakeCompletion, FakeRunner, FakeRunnerError,
+    FakeRunnerEvent, FakeRunnerState, FakeScript, FakeStep, OutputEvent, OutputPayload,
+    ProvisionalArtifact, RejectionReason, RepresentationKind, RunnerEvent, RunnerIdentity,
+    SessionId, StateKey,
 };

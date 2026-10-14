@@ -2,17 +2,21 @@
 
 use std::time::Duration;
 
+use serde::{Deserialize, Serialize};
+
 use crate::{CellId, Diagnostic, ExecutionKey, SourceRevision};
 
 mod coordinator;
 mod fake;
 mod runner;
+mod store;
 
 pub use coordinator::{
     AcceptedExecution, AttemptReport, CompletionDisposition, CoordinatorError,
     ExecutionCoordinator, RejectionReason,
 };
 pub use runner::{ExecutionRunner, ProvisionalArtifact, RunnerEvent};
+pub use store::ExecutionStore;
 
 pub use fake::{
     FakeArtifact, FakeCompletion, FakeRunner, FakeRunnerError, FakeRunnerEvent, FakeRunnerState,
@@ -22,21 +26,21 @@ pub use fake::{
 /// A single dispatch, unique within its owning execution coordinator.
 ///
 /// Retries receive new IDs, even when the cell and execution key are unchanged.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct AttemptId(pub u64);
 
 /// A logical interpreter session within one execution coordinator.
 ///
 /// Named sessions retain their ID across restarts. Isolated executions receive
 /// distinct session IDs. IDs from different coordinators are unrelated.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SessionId(pub u64);
 
 /// A digest of the cumulative interpreter state required by a stateful cell.
 ///
 /// The planner computes this from the environment and preceding computations.
 /// Cached output alone does not prove that a runner has materialized this state.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct StateKey([u8; 32]);
 
 impl StateKey {
@@ -53,7 +57,7 @@ impl StateKey {
 ///
 /// Constructing a request does not authorize execution. The effectful scheduler
 /// must check that execution is authorized and that the request is still desired.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct ExecutionRequest {
     pub source_revision: SourceRevision,
     pub attempt_id: AttemptId,
@@ -71,7 +75,7 @@ pub struct ExecutionRequest {
 /// Runner implementation, version, and process incarnation that performed work.
 ///
 /// A restarted process must receive a new incarnation, even in the same session.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct RunnerIdentity {
     pub name: String,
     pub version: String,
@@ -79,7 +83,7 @@ pub struct RunnerIdentity {
 }
 
 /// Attribution shared by every terminal outcome, including cancellation.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct ExecutionProvenance {
     /// Retain the dispatched request so later publication can validate its scope.
     pub request: ExecutionRequest,
@@ -91,7 +95,7 @@ pub struct ExecutionProvenance {
 }
 
 /// Terminal disposition of an attempt, independent of diagnostic severity.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExecutionStatus {
     Success,
     Failure,
@@ -104,7 +108,7 @@ pub enum ExecutionStatus {
 /// Success is still provisional: publication must validate the request's revision,
 /// attempt, session, predecessor state, and effective execution key against the
 /// currently desired computation. Events remain provisional until that check.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct ExecutionOutcome {
     pub status: ExecutionStatus,
     pub diagnostics: Vec<Diagnostic>,
@@ -119,7 +123,7 @@ pub struct ExecutionOutcome {
 /// kinds. Receivers must reject duplicate, missing, or out-of-order sequences and
 /// mismatched identities as protocol errors. A terminal outcome contains the same
 /// stream in sequence order; it does not authorize publication of partial output.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct OutputEvent {
     pub source_revision: SourceRevision,
     pub session_id: SessionId,
@@ -130,7 +134,7 @@ pub struct OutputEvent {
 }
 
 /// Captured output, unaffected by source visibility or rendering options.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub enum OutputPayload {
     Stdout(String),
     Stderr(String),
@@ -142,18 +146,18 @@ pub enum OutputPayload {
 ///
 /// This is not a filesystem path or URL. During execution it refers to staged
 /// data owned by the attempt; publication must commit that data transactionally.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ArtifactId(pub String);
 
 /// A reference to stored bytes with their declared media type.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct ArtifactReference {
     pub id: ArtifactId,
     pub media_type: String,
 }
 
 /// Representation categories that a renderer can advertise in preference order.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RepresentationKind {
     Text,
     Html,
@@ -167,7 +171,7 @@ pub enum RepresentationKind {
 /// HTML and SVG are untrusted content and require the backend's trust policy.
 /// PNG bytes live in the artifact store; their reference must declare `image/png`.
 /// Generic artifacts allow additional media types without changing this enum.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub enum DisplayRepresentation {
     Text(String),
     Html(String),
@@ -192,7 +196,7 @@ impl DisplayRepresentation {
 ///
 /// Producers should include a text fallback for rich output. Source captions and
 /// presentation options belong to the compiler, not this runner-owned bundle.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct DisplayBundle {
     pub representations: Vec<DisplayRepresentation>,
 }

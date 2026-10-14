@@ -164,7 +164,7 @@ pub(super) fn rebind_origin(origin: &Origin, file: &SourceFile, offset: i128) ->
     match origin {
         Origin::Source(span) => Origin::Source(rebind_span(span, file, offset)),
         Origin::Derived(derivation) => Origin::Derived(Arc::new(Derivation {
-            operation: derivation.operation,
+            operation: derivation.operation.clone(),
             span: derivation
                 .span
                 .as_ref()

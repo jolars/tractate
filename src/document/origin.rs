@@ -5,11 +5,14 @@
     reason = "Later compiler passes and diagnostics consume the retained origins."
 )]
 
+use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use serde::{Deserialize, Serialize};
+
 /// A half-open UTF-8 byte range, validated when attached to a source file.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SourceRange {
     pub start: usize,
     pub end: usize,
@@ -20,10 +23,10 @@ pub struct SourceRange {
 /// A new snapshot has its own identity even at the same path. Origins can thus
 /// outlive an edit without resolving old offsets against new text. This is not
 /// a semantic node identity or a persistent cache key.
-#[derive(Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SourceFile(Arc<SourceSnapshot>);
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 struct SourceSnapshot {
     path: Option<PathBuf>,
     text: String,
@@ -71,7 +74,8 @@ impl SourceFile {
 }
 
 /// A validated location that retains the exact file snapshot it describes.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[serde(try_from = "StoredSpan")]
 pub struct SourceSpan {
     file: SourceFile,
     range: SourceRange,
@@ -93,16 +97,16 @@ impl SourceSpan {
 
 /// Provenance always ends at source, even when an intermediate node has no
 /// physical location. Generated locations supplement the initiating QMD span.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub enum Origin {
     Source(SourceSpan),
     Derived(Arc<Derivation>),
 }
 
 /// Share transformation steps without enlarging every direct source origin.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct Derivation {
-    pub operation: &'static str,
+    pub operation: Cow<'static, str>,
     pub span: Option<SourceSpan>,
     pub parent: Origin,
 }
@@ -110,7 +114,7 @@ pub struct Derivation {
 impl Origin {
     pub fn derived(&self, operation: &'static str) -> Self {
         Self::Derived(Arc::new(Derivation {
-            operation,
+            operation: operation.into(),
             span: None,
             parent: self.clone(),
         }))
@@ -118,7 +122,7 @@ impl Origin {
 
     pub fn generated(&self, operation: &'static str, span: SourceSpan) -> Self {
         Self::Derived(Arc::new(Derivation {
-            operation,
+            operation: operation.into(),
             span: Some(span),
             parent: self.clone(),
         }))
@@ -149,5 +153,20 @@ impl Origin {
             Self::Source(span) => Some(span),
             Self::Derived(derivation) => derivation.span.as_ref(),
         }
+    }
+}
+
+// Cached spans must pass the same UTF-8 and range checks as live source spans.
+#[derive(Deserialize)]
+struct StoredSpan {
+    file: SourceFile,
+    range: SourceRange,
+}
+
+impl TryFrom<StoredSpan> for SourceSpan {
+    type Error = &'static str;
+
+    fn try_from(span: StoredSpan) -> Result<Self, Self::Error> {
+        span.file.span(span.range).ok_or("invalid source span")
     }
 }

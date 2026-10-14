@@ -169,9 +169,9 @@ This stage establishes the effect boundary and race safety without depending on 
   protocol-invalid work.
 - [x] Poison an uncertain stateful runner and reconstruct state in a fresh
   runner by replaying the valid prefix.
-- [ ] Store provisional artifacts by content digest, then atomically commit a
+- [x] Store provisional artifacts by content digest, then atomically commit a
   result record only after publication checks pass.
-- [ ] Treat partial or corrupt artifact writes as cache misses.
+- [x] Treat partial or corrupt artifact writes as cache misses.
 - [ ] Expose pending, running, succeeded, failed, cancelled, unavailable, and
   stale-last-known-good states to renderers.
 

@@ -4,6 +4,8 @@ use std::fmt;
 use std::path::Path;
 use std::sync::{Arc, Mutex, OnceLock};
 
+use serde::{Deserialize, Serialize};
+
 use crate::document::{
     Diagnostic, DocumentInspection, Presentation, SemanticIds, SlideKind, SourceFile,
 };
@@ -21,7 +23,7 @@ mod tests;
 /// Compare revisions only within their owning compiler. This is neither a
 /// semantic identity nor a persistent cache key. Equal numbers from independent
 /// compilers do not identify the same input.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SourceRevision(u64);
 
 impl SourceRevision {

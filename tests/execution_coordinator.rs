@@ -5,9 +5,9 @@ use tractate::{
     AcceptedExecution, ArtifactId, ArtifactReference, AttemptId, AttemptReport, CellId, Compiler,
     CompilerSnapshot, CompletionDisposition, CoordinatorError, ExecutionCoordinator,
     ExecutionInputs, ExecutionKey, ExecutionOutcome, ExecutionRequest, ExecutionRunner,
-    ExecutionStatus, FakeArtifact, FakeCompletion, FakeRunner, FakeRunnerError, FakeRunnerState,
-    FakeScript, FakeStep, OutputEvent, OutputPayload, RejectionReason, RunnerEvent, RunnerIdentity,
-    ScheduledCellState, SessionId, SourceFile, StateKey,
+    ExecutionStatus, ExecutionStore, FakeArtifact, FakeCompletion, FakeRunner, FakeRunnerError,
+    FakeRunnerState, FakeScript, FakeStep, OutputEvent, OutputPayload, RejectionReason,
+    RunnerEvent, RunnerIdentity, ScheduledCellState, SessionId, SourceFile, StateKey,
 };
 
 type Coordinator = ExecutionCoordinator<FakeRunner>;
@@ -176,7 +176,11 @@ fn coordinator_replays_a_valid_prefix_in_a_fresh_incarnation_after_a_suffix_edit
     let mut compiler = compiler(&source);
     let original = compiler.snapshot();
     let ids = ids(&original);
-    let mut coordinator = coordinator(1);
+    let cache = tempfile::tempdir().unwrap();
+    let mut coordinator = ExecutionCoordinator::with_store(
+        NonZeroUsize::new(1).unwrap(),
+        ExecutionStore::open(cache.path()).unwrap(),
+    );
     reconcile(&mut coordinator, &original);
     finish(&mut coordinator);
     let prefix = [result(&coordinator, ids[0]), result(&coordinator, ids[1])];
@@ -215,6 +219,15 @@ fn coordinator_replays_a_valid_prefix_in_a_fresh_incarnation_after_a_suffix_edit
         [result(&coordinator, ids[0]), result(&coordinator, ids[1])],
         prefix
     );
+    for result in &prefix {
+        assert_eq!(
+            coordinator
+                .store()
+                .unwrap()
+                .load(result.outcome.provenance.request.execution_key),
+            Some(result.clone())
+        );
+    }
     let runner = coordinator.runner(session_id).unwrap();
     assert_eq!(runner.identity().incarnation, 2);
     assert_eq!(runner.execution_count(), 8);
@@ -493,7 +506,11 @@ fn coordinator_validates_every_completion_identity_before_advancing_state() {
         let mut compiler = compiler(&chain());
         let original = compiler.snapshot();
         let ids = ids(&original);
-        let mut coordinator = coordinator(1);
+        let cache = tempfile::tempdir().unwrap();
+        let mut coordinator = ExecutionCoordinator::with_store(
+            NonZeroUsize::new(1).unwrap(),
+            ExecutionStore::open(cache.path()).unwrap(),
+        );
         reconcile(&mut coordinator, &original);
         let request = dispatch(&mut coordinator).pop().unwrap();
         let Some(RunnerEvent::Complete(mut outcome)) =
@@ -525,7 +542,7 @@ fn coordinator_validates_every_completion_identity_before_advancing_state() {
                 sequence: 0,
                 payload: OutputPayload::Stdout("undelivered".into()),
             }),
-            RejectionReason::Revoked => unreachable!(),
+            RejectionReason::Revoked | RejectionReason::Artifact => unreachable!(),
         }
         let report = coordinator
             .receive(request.session_id, RunnerEvent::Complete(outcome))
@@ -534,6 +551,13 @@ fn coordinator_validates_every_completion_identity_before_advancing_state() {
         assert_eq!(report.disposition, CompletionDisposition::Rejected(reason));
         assert_eq!(coordinator.materialized_state_key(request.session_id), None);
         assert!(coordinator.result(ids[0]).is_none());
+        assert!(
+            coordinator
+                .store()
+                .unwrap()
+                .load(request.execution_key)
+                .is_none()
+        );
         assert_eq!(coordinator.state(ids[1]), Some(ScheduledCellState::Blocked));
         coordinator.retry(ids[0]).unwrap();
         finish(&mut coordinator);
@@ -789,7 +813,11 @@ fn coordinator_rekeys_same_revision_and_retains_only_current_volatile_results() 
         let snapshot = compiler(&cell("a", "r", session)).snapshot();
         let plan = snapshot.evaluation_plan().unwrap();
         let id = plan.cells[0].cell_id;
-        let mut coordinator = coordinator(1);
+        let cache = tempfile::tempdir().unwrap();
+        let mut coordinator = ExecutionCoordinator::with_store(
+            NonZeroUsize::new(1).unwrap(),
+            ExecutionStore::open(cache.path()).unwrap(),
+        );
         let mut inputs = BTreeMap::from([(
             id,
             ExecutionInputs {
@@ -803,6 +831,13 @@ fn coordinator_rekeys_same_revision_and_retains_only_current_volatile_results() 
             .unwrap();
         finish(&mut coordinator);
         let original = result(&coordinator, id);
+        assert!(
+            coordinator
+                .store()
+                .unwrap()
+                .load(original.outcome.provenance.request.execution_key)
+                .is_none()
+        );
         coordinator
             .reconcile(&plan.keyed(&inputs).unwrap())
             .unwrap();
@@ -828,6 +863,12 @@ fn coordinator_rekeys_same_revision_and_retains_only_current_volatile_results() 
                 .identity()
                 .incarnation,
             if session == "isolated" { 1 } else { 2 }
+        );
+        assert_eq!(
+            std::fs::read_dir(cache.path().join("v1/results"))
+                .unwrap()
+                .count(),
+            0
         );
         if session == "isolated" {
             assert_ne!(
@@ -944,7 +985,11 @@ fn coordinator_adapter_errors_and_unverified_state_never_publish_or_release_uncl
     ] {
         let snapshot = compiler(&chain()).snapshot();
         let ids = ids(&snapshot);
-        let mut coordinator = ExecutionCoordinator::new(NonZeroUsize::new(1).unwrap());
+        let cache = tempfile::tempdir().unwrap();
+        let mut coordinator = ExecutionCoordinator::with_store(
+            NonZeroUsize::new(1).unwrap(),
+            ExecutionStore::open(cache.path()).unwrap(),
+        );
         reconcile(&mut coordinator, &snapshot);
         let dispatched = coordinator.dispatch_ready(|session_id| FaultRunner {
             inner: FakeRunner::new(session_id),
@@ -978,6 +1023,12 @@ fn coordinator_adapter_errors_and_unverified_state_never_publish_or_release_uncl
         let session_id = coordinator.session_id(ids[0]).unwrap();
         assert_eq!(coordinator.materialized_state_key(session_id), None);
         assert!(coordinator.result(ids[0]).is_none());
+        assert_eq!(
+            std::fs::read_dir(cache.path().join("v1/results"))
+                .unwrap()
+                .count(),
+            0
+        );
         assert_eq!(coordinator.state(ids[0]), Some(ScheduledCellState::Failed));
         assert_eq!(coordinator.state(ids[1]), Some(ScheduledCellState::Blocked));
         if matches!(

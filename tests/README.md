@@ -73,6 +73,18 @@ unrelated sessions to finish. Deterministic output from a fake adapter compares
 incremental and clean full builds across prose edits, code edits, disabled
 cells, session moves, deletion, restoration, LF, and CRLF.
 
+`execution_store.rs` checks content-addressed staging, deduplication, artifact
+alias replacement, and atomic publication through the public coordinator API. A
+concurrent reader sees complete old or new records during replacement. Reopening
+the store preserves output, provenance, diagnostics, and source origins.
+Missing, truncated, corrupt, incompatible, and protocol-invalid records or
+objects produce cache misses. Failure, crash, cancellation, stale completion,
+missing artifacts, and filesystem write errors cannot publish new results or
+advance verified session state. Separate processes exercise the single-writer
+lock. The coordinator tests also check that invalid completion identities and
+adapter failures never publish records, replay preserves committed prefix
+records, and volatile work stays out of the persistent cache.
+
 `slide_changes.rs` checks the public slide difference API across insertion,
 deletion, reordering combined with modification, title and boundary edits,
 identical updates, path changes, repeated boundaries, source gaps, invalid

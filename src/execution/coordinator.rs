@@ -2,7 +2,10 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
+use std::io;
 use std::num::NonZeroUsize;
+
+use serde::{Deserialize, Serialize};
 
 use crate::{
     CellId, EvaluationSession, ExecutionKey, KeyedEvaluationPlan, PlannedCell, ScheduledCellState,
@@ -11,15 +14,16 @@ use crate::{
 
 use super::{
     ArtifactId, AttemptId, ExecutionOutcome, ExecutionRequest, ExecutionRunner, ExecutionStatus,
-    OutputEvent, ProvisionalArtifact, RunnerEvent, RunnerIdentity, SessionId, StateKey,
+    ExecutionStore, OutputEvent, ProvisionalArtifact, RunnerEvent, RunnerIdentity, SessionId,
+    StateKey,
 };
 
 /// An accepted logical result retained in this coordinator's memory.
 ///
 /// Provenance keeps the original dispatch revision. Reconciliation can retain
 /// this result for a later revision with identical computation inputs. Artifact
-/// bytes remain provisional; this is not a persistent cache or artifact store.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// references use content addresses when published through an execution store.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct AcceptedExecution {
     pub outcome: ExecutionOutcome,
     pub artifacts: BTreeMap<ArtifactId, ProvisionalArtifact>,
@@ -35,6 +39,7 @@ pub enum RejectionReason {
     Request,
     Runner,
     EventStream,
+    Artifact,
     Revoked,
 }
 
@@ -70,6 +75,7 @@ pub enum CoordinatorError<E> {
         session_id: SessionId,
         reason: RejectionReason,
     },
+    Store(io::Error),
 }
 
 impl<E: fmt::Display> fmt::Display for CoordinatorError<E> {
@@ -90,6 +96,7 @@ impl<E: fmt::Display> fmt::Display for CoordinatorError<E> {
                     "invalid protocol for session {session_id:?}: {reason:?}"
                 )
             }
+            Self::Store(source) => write!(formatter, "execution store: {source}"),
         }
     }
 }
@@ -98,6 +105,7 @@ impl<E: std::error::Error + 'static> std::error::Error for CoordinatorError<E> {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Runner { source, .. } => Some(source),
+            Self::Store(source) => Some(source),
             _ => None,
         }
     }
@@ -180,8 +188,9 @@ struct Session<R> {
 /// concurrency slots until termination or explicit forced cleanup.
 ///
 /// Logical results remain separate from interpreter state. Replay never replaces
-/// a retained prefix result. Persistent publication and rendering are separate
-/// consumers of accepted results and are not performed by this coordinator.
+/// a retained prefix result. An optional execution store stages objects and
+/// atomically publishes successful records after all acceptance checks pass.
+/// Persistent lookup does not restore interpreter state or authorize execution.
 #[derive(Debug)]
 pub struct ExecutionCoordinator<R: ExecutionRunner> {
     max_concurrent: NonZeroUsize,
@@ -194,6 +203,7 @@ pub struct ExecutionCoordinator<R: ExecutionRunner> {
     retired: BTreeSet<AttemptId>,
     next_attempt: u64,
     next_session: u64,
+    store: Option<ExecutionStore>,
 }
 
 impl<R: ExecutionRunner> ExecutionCoordinator<R> {
@@ -209,7 +219,21 @@ impl<R: ExecutionRunner> ExecutionCoordinator<R> {
             retired: BTreeSet::new(),
             next_attempt: 1,
             next_session: 1,
+            store: None,
         }
+    }
+
+    /// Publish accepted nonvolatile results through the supplied store.
+    /// Lookup and cache policy remain explicit decisions by the caller.
+    pub fn with_store(max_concurrent: NonZeroUsize, store: ExecutionStore) -> Self {
+        Self {
+            store: Some(store),
+            ..Self::new(max_concurrent)
+        }
+    }
+
+    pub fn store(&self) -> Option<&ExecutionStore> {
+        self.store.as_ref()
     }
 
     /// Reconcile desired computation, retaining only matching logical results.
@@ -558,6 +582,13 @@ impl<R: ExecutionRunner> ExecutionCoordinator<R> {
         if let Some(reason) = reason {
             return self.reject(session_id, reason).map(Some);
         }
+        if let RunnerEvent::Artifact { artifact, .. } = &event
+            && let Some(store) = &self.store
+            && let Err(source) = store.stage(artifact)
+        {
+            self.reject(session_id, RejectionReason::Artifact)?;
+            return Err(CoordinatorError::Store(source));
+        }
         let session = self.sessions.get_mut(&session_id).unwrap();
         match event {
             RunnerEvent::Output(event) => {
@@ -616,52 +647,86 @@ impl<R: ExecutionRunner> ExecutionCoordinator<R> {
         session_id: SessionId,
         outcome: ExecutionOutcome,
     ) -> Result<AttemptReport, CoordinatorError<R::Error>> {
-        let session = self.sessions.get_mut(&session_id).unwrap();
-        if outcome.status == ExecutionStatus::Success {
-            let active = session.active.as_ref().unwrap();
-            if let Err(source) = session.runner.accept_success(active.request.attempt_id) {
-                self.reject(session_id, RejectionReason::Runner)?;
-                return Err(CoordinatorError::Runner { session_id, source });
-            }
-            if session.runner.materialized_state_key() != active.resulting {
-                return self.reject(session_id, RejectionReason::PredecessorState);
-            }
-        }
-        let active = session.active.take().unwrap();
-        self.retired.insert(active.request.attempt_id);
-        let report = active.report(CompletionDisposition::Completed(outcome.status));
-        if outcome.status == ExecutionStatus::Success {
-            if active.resulting.is_none() {
-                let cleanup = session.runner.shutdown();
-                session.cleanup_pending = cleanup.is_err();
-                if let Err(source) = cleanup {
-                    self.fail_target(active.target, ExecutionStatus::Failure);
-                    return Err(CoordinatorError::Runner { session_id, source });
-                }
-            }
-            session.verified_state = active.resulting;
-            if active.replay {
-                self.states
-                    .insert(active.target, ScheduledCellState::Pending);
-            } else {
-                session.replay_target = None;
-                self.states
-                    .insert(active.target, ScheduledCellState::Succeeded);
-                self.results.insert(
-                    active.target,
-                    AcceptedExecution {
-                        outcome,
-                        artifacts: active.artifacts,
-                    },
-                );
-            }
-        } else {
+        if outcome.status != ExecutionStatus::Success {
+            let session = self.sessions.get_mut(&session_id).unwrap();
+            let active = session.active.take().unwrap();
+            self.retired.insert(active.request.attempt_id);
+            let report = active.report(CompletionDisposition::Completed(outcome.status));
             session.verified_state = None;
             session.replay_target = None;
             let cleanup = session.runner.shutdown();
             session.cleanup_pending = cleanup.is_err();
             self.fail_target(active.target, outcome.status);
             cleanup.map_err(|source| CoordinatorError::Runner { session_id, source })?;
+            return Ok(report);
+        }
+
+        let active = self
+            .sessions
+            .get_mut(&session_id)
+            .unwrap()
+            .active
+            .as_mut()
+            .unwrap();
+        let mut execution = AcceptedExecution {
+            outcome,
+            artifacts: std::mem::take(&mut active.artifacts),
+        };
+        if super::store::validate_references(&execution, true).is_err() {
+            return self.reject(session_id, RejectionReason::Artifact);
+        }
+        if let Some(store) = &self.store {
+            execution = match store.prepare(execution.outcome, execution.artifacts) {
+                Ok(execution) => execution,
+                Err(source) => {
+                    self.reject(session_id, RejectionReason::Artifact)?;
+                    return Err(CoordinatorError::Store(source));
+                }
+            };
+        }
+        let session = self.sessions.get_mut(&session_id).unwrap();
+        let active = session.active.as_ref().unwrap();
+        if let Err(source) = session.runner.accept_success(active.request.attempt_id) {
+            self.reject(session_id, RejectionReason::Runner)?;
+            return Err(CoordinatorError::Runner { session_id, source });
+        }
+        if session.runner.materialized_state_key() != active.resulting {
+            return self.reject(session_id, RejectionReason::PredecessorState);
+        }
+        if active.resulting.is_none()
+            && let Err(source) = session.runner.shutdown()
+        {
+            self.reject(session_id, RejectionReason::Runner)?;
+            return Err(CoordinatorError::Runner { session_id, source });
+        }
+        // Replay must retain the original logical result. Volatile work must
+        // never become reusable through the persistent cache.
+        let active = self.sessions[&session_id].active.as_ref().unwrap();
+        if !active.replay
+            && self
+                .desired_cell(active.target)
+                .unwrap()
+                .volatile_nonce
+                .is_none()
+            && let Some(store) = &self.store
+            && let Err(source) = store.commit(&execution)
+        {
+            self.reject(session_id, RejectionReason::Artifact)?;
+            return Err(CoordinatorError::Store(source));
+        }
+        let session = self.sessions.get_mut(&session_id).unwrap();
+        let active = session.active.take().unwrap();
+        self.retired.insert(active.request.attempt_id);
+        let report = active.report(CompletionDisposition::Completed(ExecutionStatus::Success));
+        session.verified_state = active.resulting;
+        if active.replay {
+            self.states
+                .insert(active.target, ScheduledCellState::Pending);
+        } else {
+            session.replay_target = None;
+            self.states
+                .insert(active.target, ScheduledCellState::Succeeded);
+            self.results.insert(active.target, execution);
         }
         Ok(report)
     }

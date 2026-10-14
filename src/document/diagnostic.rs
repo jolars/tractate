@@ -1,9 +1,11 @@
 //! Diagnostics shared by parsing, compilation, execution, and rendering.
 
+use serde::{Deserialize, Serialize};
+
 use super::Origin;
 
 /// Severity is independent of the diagnostic's code and producer.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Severity {
     Error,
     #[allow(dead_code, reason = "Subsequent compiler passes can emit warnings.")]
@@ -13,7 +15,7 @@ pub enum Severity {
 }
 
 /// Tractate-owned categories; codes must not depend on upstream message wording.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DiagnosticCode {
     InvalidYaml,
     UnknownOption,
@@ -55,7 +57,7 @@ impl DiagnosticCode {
 }
 
 /// A diagnostic owns its message and retains the snapshots behind every origin.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct Diagnostic {
     pub severity: Severity,
     pub code: DiagnosticCode,
@@ -66,7 +68,7 @@ pub struct Diagnostic {
     pub related: Vec<RelatedOrigin>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct RelatedOrigin {
     pub message: String,
     pub origin: Origin,

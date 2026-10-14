@@ -1,19 +1,21 @@
 //! Interpreter adapters used by the revision-aware execution coordinator.
 
+use serde::{Deserialize, Serialize};
+
 use super::{
     ArtifactReference, AttemptId, ExecutionOutcome, ExecutionRequest, OutputEvent, RunnerIdentity,
     StateKey,
 };
 
 /// Provisional bytes owned by an attempt, before artifact-store publication.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct ProvisionalArtifact {
     pub reference: ArtifactReference,
     pub bytes: Vec<u8>,
 }
 
 /// Effects delivered through an adapter's control channel.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub enum RunnerEvent {
     Output(OutputEvent),
     Artifact {
