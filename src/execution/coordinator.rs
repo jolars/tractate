@@ -8,14 +8,14 @@ use std::num::NonZeroUsize;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    CellId, EvaluationSession, ExecutionKey, KeyedEvaluationPlan, PlannedCell, ScheduledCellState,
-    SourceRevision,
+    CellId, Diagnostic, DiagnosticCode, EvaluationSession, ExecutionKey, KeyedEvaluationPlan,
+    PlannedCell, RelatedOrigin, ScheduledCellState, SourceRevision,
 };
 
 use super::{
-    ArtifactId, AttemptId, ExecutionOutcome, ExecutionRequest, ExecutionRunner, ExecutionStatus,
-    ExecutionStore, OutputEvent, ProvisionalArtifact, RunnerEvent, RunnerIdentity, SessionId,
-    StateKey,
+    ArtifactId, AttemptId, CellExecutionState, CellExecutionView, ExecutionOutcome,
+    ExecutionRequest, ExecutionRunner, ExecutionStatus, ExecutionStore, OutputEvent,
+    ProvisionalArtifact, RunnerEvent, RunnerIdentity, SessionId, StateKey,
 };
 
 /// An accepted logical result retained in this coordinator's memory.
@@ -198,6 +198,8 @@ pub struct ExecutionCoordinator<R: ExecutionRunner> {
     desired: Vec<DesiredCell>,
     states: BTreeMap<CellId, ScheduledCellState>,
     results: BTreeMap<CellId, AcceptedExecution>,
+    last_good: BTreeMap<CellId, AcceptedExecution>,
+    diagnostics: BTreeMap<CellId, Vec<Diagnostic>>,
     session_ids: BTreeMap<SessionScope, SessionId>,
     sessions: BTreeMap<SessionId, Session<R>>,
     retired: BTreeSet<AttemptId>,
@@ -214,6 +216,8 @@ impl<R: ExecutionRunner> ExecutionCoordinator<R> {
             desired: Vec::new(),
             states: BTreeMap::new(),
             results: BTreeMap::new(),
+            last_good: BTreeMap::new(),
+            diagnostics: BTreeMap::new(),
             session_ids: BTreeMap::new(),
             sessions: BTreeMap::new(),
             retired: BTreeSet::new(),
@@ -282,14 +286,22 @@ impl<R: ExecutionRunner> ExecutionCoordinator<R> {
                 self.next_session += 1;
             }
         }
-        self.results.retain(|cell_id, _| {
+        for (cell_id, result) in std::mem::take(&mut self.results) {
             let old = self
                 .desired
                 .iter()
-                .find(|cell| cell.cell.cell_id == *cell_id);
-            let new = desired.iter().find(|cell| cell.cell.cell_id == *cell_id);
-            matches!((old, new), (Some(old), Some(new)) if new.same_computation(old))
-        });
+                .find(|cell| cell.cell.cell_id == cell_id);
+            let new = desired.iter().find(|cell| cell.cell.cell_id == cell_id);
+            let keep = matches!((old, new), (Some(old), Some(new)) if new.same_computation(old));
+            if keep {
+                self.results.insert(cell_id, result);
+            } else if new.is_some() {
+                self.last_good.insert(cell_id, result);
+            }
+        }
+        self.last_good
+            .retain(|cell_id, _| desired.iter().any(|cell| cell.cell.cell_id == *cell_id));
+        self.diagnostics.clear();
         for session in self.sessions.values_mut() {
             session.replay_target = None;
             if let Some(active) = &mut session.active {
@@ -336,7 +348,10 @@ impl<R: ExecutionRunner> ExecutionCoordinator<R> {
             }
         }
         for &id in &affected {
-            self.results.remove(&id);
+            if let Some(result) = self.results.remove(&id) {
+                self.last_good.insert(id, result);
+            }
+            self.diagnostics.remove(&id);
             self.states.insert(id, ScheduledCellState::Pending);
         }
         for session in self.sessions.values_mut() {
@@ -412,13 +427,19 @@ impl<R: ExecutionRunner> ExecutionCoordinator<R> {
                 session.verified_state = None;
                 if let Err(source) = session.runner.shutdown() {
                     session.cleanup_pending = true;
-                    self.fail_target(target_id, ExecutionStatus::Failure);
+                    let diagnostic = self.failure_diagnostic(
+                        target_id,
+                        format!("could not shut down runner: {source}"),
+                    );
+                    self.fail_target(target_id, ExecutionStatus::Failure, vec![diagnostic]);
                     return Err(CoordinatorError::Runner { session_id, source });
                 }
                 let previous_incarnation = session.runner.identity().incarnation;
                 if let Err(source) = session.runner.start(initial) {
                     session.cleanup_pending = true;
-                    self.fail_target(target_id, ExecutionStatus::Failure);
+                    let diagnostic = self
+                        .failure_diagnostic(target_id, format!("could not start runner: {source}"));
+                    self.fail_target(target_id, ExecutionStatus::Failure, vec![diagnostic]);
                     return Err(CoordinatorError::Runner { session_id, source });
                 }
                 if session.runner.identity().incarnation == previous_incarnation {
@@ -459,7 +480,11 @@ impl<R: ExecutionRunner> ExecutionCoordinator<R> {
                 self.retired.insert(request.attempt_id);
                 session.replay_target = None;
                 session.cleanup_pending = true;
-                self.fail_target(target_id, ExecutionStatus::Failure);
+                let diagnostic = self.failure_diagnostic(
+                    target_id,
+                    format!("could not dispatch execution: {source}"),
+                );
+                self.fail_target(target_id, ExecutionStatus::Failure, vec![diagnostic]);
                 return Err(CoordinatorError::Runner { session_id, source });
             }
             session.active = Some(ActiveAttempt {
@@ -488,7 +513,11 @@ impl<R: ExecutionRunner> ExecutionCoordinator<R> {
         session.replay_target = None;
         let cleanup = session.runner.shutdown();
         session.cleanup_pending = cleanup.is_err();
-        self.fail_target(target, ExecutionStatus::Failure);
+        let diagnostic = self.failure_diagnostic(
+            target,
+            format!("invalid runner startup protocol: {reason:?}"),
+        );
+        self.fail_target(target, ExecutionStatus::Failure, vec![diagnostic]);
         cleanup.map_err(|source| CoordinatorError::Runner { session_id, source })?;
         Err(CoordinatorError::Protocol { session_id, reason })
     }
@@ -656,7 +685,7 @@ impl<R: ExecutionRunner> ExecutionCoordinator<R> {
             session.replay_target = None;
             let cleanup = session.runner.shutdown();
             session.cleanup_pending = cleanup.is_err();
-            self.fail_target(active.target, outcome.status);
+            self.fail_target(active.target, outcome.status, outcome.diagnostics);
             cleanup.map_err(|source| CoordinatorError::Runner { session_id, source })?;
             return Ok(report);
         }
@@ -726,6 +755,8 @@ impl<R: ExecutionRunner> ExecutionCoordinator<R> {
             session.replay_target = None;
             self.states
                 .insert(active.target, ScheduledCellState::Succeeded);
+            self.diagnostics.remove(&active.target);
+            self.last_good.remove(&active.target);
             self.results.insert(active.target, execution);
         }
         Ok(report)
@@ -744,7 +775,9 @@ impl<R: ExecutionRunner> ExecutionCoordinator<R> {
         let cleanup = session.runner.shutdown();
         session.cleanup_pending = cleanup.is_err();
         if !active.revoked {
-            self.fail_target(active.target, ExecutionStatus::Failure);
+            let diagnostic =
+                self.failure_diagnostic(active.target, format!("execution rejected: {reason:?}"));
+            self.fail_target(active.target, ExecutionStatus::Failure, vec![diagnostic]);
         }
         cleanup.map_err(|source| CoordinatorError::Runner { session_id, source })?;
         Ok(active.report(CompletionDisposition::Rejected(reason)))
@@ -773,7 +806,37 @@ impl<R: ExecutionRunner> ExecutionCoordinator<R> {
         Ok(())
     }
 
-    fn fail_target(&mut self, target: CellId, status: ExecutionStatus) {
+    fn failure_diagnostic(&self, target: CellId, message: impl Into<String>) -> Diagnostic {
+        crate::document::error(
+            DiagnosticCode::ExecutionFailed,
+            &self.desired_cell(target).unwrap().cell.origin,
+            message,
+        )
+    }
+
+    fn fail_target(
+        &mut self,
+        target: CellId,
+        status: ExecutionStatus,
+        mut diagnostics: Vec<Diagnostic>,
+    ) {
+        if diagnostics.is_empty() {
+            let cancelled = status == ExecutionStatus::Cancelled;
+            diagnostics.push(crate::document::error(
+                if cancelled {
+                    DiagnosticCode::ExecutionCancelled
+                } else {
+                    DiagnosticCode::ExecutionFailed
+                },
+                &self.desired_cell(target).unwrap().cell.origin,
+                if cancelled {
+                    "execution was cancelled"
+                } else {
+                    "execution failed"
+                },
+            ));
+        }
+        self.diagnostics.insert(target, diagnostics);
         self.states.insert(
             target,
             if status == ExecutionStatus::Cancelled {
@@ -792,6 +855,17 @@ impl<R: ExecutionRunner> ExecutionCoordinator<R> {
                 blocked.insert(cell.cell.cell_id);
                 self.states
                     .insert(cell.cell.cell_id, ScheduledCellState::Blocked);
+                let predecessor = self.desired_cell(cell.cell.predecessor.unwrap()).unwrap();
+                let mut diagnostic = crate::document::error(
+                    DiagnosticCode::ExecutionBlocked,
+                    &cell.cell.origin,
+                    "execution is blocked because its predecessor did not succeed",
+                );
+                diagnostic.related.push(RelatedOrigin {
+                    message: "This predecessor must succeed before execution can continue.".into(),
+                    origin: predecessor.cell.origin.clone(),
+                });
+                self.diagnostics.insert(cell.cell.cell_id, vec![diagnostic]);
             }
         }
     }
@@ -817,8 +891,68 @@ impl<R: ExecutionRunner> ExecutionCoordinator<R> {
         self.states.get(&cell_id).copied()
     }
 
+    /// Only accepted output for the current computation. Stale preview fallbacks
+    /// are available through [`Self::cell_view`] with their explicit status.
     pub fn result(&self, cell_id: CellId) -> Option<&AcceptedExecution> {
         self.results.get(&cell_id)
+    }
+
+    /// Inspect output and progress for a desired cell without performing effects.
+    ///
+    /// `no_execute` reports pending cells without valid results as unavailable.
+    /// It does not interrupt work or change execution authorization. The caller
+    /// must also refrain from dispatching when execution is disabled. Persistent
+    /// cache lookup and cache policy remain separate orchestration responsibilities.
+    /// Stale output survives invalidation and retries only while its `CellId`
+    /// remains in the desired plan; removed or disabled cells have no view.
+    pub fn cell_view(&self, cell_id: CellId, no_execute: bool) -> Option<CellExecutionView<'_>> {
+        let desired = self.desired_cell(cell_id)?;
+        let progress = self.states[&cell_id];
+        let current = self.result(cell_id);
+        let result = current.or_else(|| self.last_good.get(&cell_id));
+        let state = if current.is_some() {
+            CellExecutionState::Succeeded
+        } else if result.is_some() {
+            CellExecutionState::StaleLastKnownGood
+        } else {
+            match progress {
+                ScheduledCellState::Pending if no_execute => CellExecutionState::Unavailable,
+                ScheduledCellState::Pending => CellExecutionState::Pending,
+                ScheduledCellState::Running => CellExecutionState::Running,
+                ScheduledCellState::Succeeded => {
+                    unreachable!("succeeded cells have an accepted result")
+                }
+                ScheduledCellState::Failed | ScheduledCellState::Blocked => {
+                    CellExecutionState::Failed
+                }
+                ScheduledCellState::Cancelled => CellExecutionState::Cancelled,
+            }
+        };
+        let diagnostics = current.map_or_else(
+            || {
+                self.diagnostics
+                    .get(&cell_id)
+                    .map_or(&[][..], Vec::as_slice)
+            },
+            |result| result.outcome.diagnostics.as_slice(),
+        );
+        Some(CellExecutionView {
+            source_revision: self.revision.unwrap(),
+            cell_id,
+            execution_key: desired.execution_key,
+            required_predecessor_state_key: desired.required,
+            state,
+            progress,
+            result,
+            diagnostics,
+        })
+    }
+
+    /// Inspect every desired cell in document order without performing effects.
+    pub fn cell_views(&self, no_execute: bool) -> impl Iterator<Item = CellExecutionView<'_>> {
+        self.desired
+            .iter()
+            .map(move |cell| self.cell_view(cell.cell.cell_id, no_execute).unwrap())
     }
 
     pub fn session_id(&self, cell_id: CellId) -> Option<SessionId> {

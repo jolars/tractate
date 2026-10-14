@@ -10,6 +10,7 @@ mod coordinator;
 mod fake;
 mod runner;
 mod store;
+mod view;
 
 pub use coordinator::{
     AcceptedExecution, AttemptReport, CompletionDisposition, CoordinatorError,
@@ -17,6 +18,7 @@ pub use coordinator::{
 };
 pub use runner::{ExecutionRunner, ProvisionalArtifact, RunnerEvent};
 pub use store::ExecutionStore;
+pub use view::{CellExecutionState, CellExecutionView};
 
 pub use fake::{
     FakeArtifact, FakeCompletion, FakeRunner, FakeRunnerError, FakeRunnerEvent, FakeRunnerState,

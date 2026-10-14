@@ -2018,6 +2018,26 @@ outputs. With a store, artifacts remain provisional until an atomic result
 record commits them after all publication checks pass. Without a store, accepted
 results remain in memory.
 
+`ExecutionCoordinator::cell_view` and `cell_views` expose read-only inputs for
+renderers without starting runners or consulting the persistent cache. Each view
+identifies the desired revision, execution key, and predecessor-state key, and
+reports pending, running, succeeded, failed, cancelled, unavailable, or
+stale-last-known-good output. Schedule progress remains available alongside
+stale output, including blocked stateful suffixes. Current failure diagnostics
+remain available even when no output can be published; blocked cells identify
+their immediate predecessor.
+
+Invalidation and retries retain the last accepted success separately from
+reusable results, including its artifact bytes. A preview can display this
+fallback only with an explicit stale status and current diagnostics. Failed,
+provisional, and obsolete output never enters these views. Successful
+replacement retires the fallback. Retention follows existing `CellId` matching,
+so cells that receive new handles have no inferred fallback; deterministic
+label-based matching remains later work. Removed and disabled cells lose their
+views and retained output. The `no_execute` view policy reports missing pending
+results as unavailable and does not authorize or interrupt execution. Persistent
+cache lookup and complete one-shot result enforcement remain orchestration work.
+
 --------------------------------------------------------------------------------
 
 # Security

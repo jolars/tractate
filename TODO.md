@@ -172,7 +172,7 @@ This stage establishes the effect boundary and race safety without depending on 
 - [x] Store provisional artifacts by content digest, then atomically commit a
   result record only after publication checks pass.
 - [x] Treat partial or corrupt artifact writes as cache misses.
-- [ ] Expose pending, running, succeeded, failed, cancelled, unavailable, and
+- [x] Expose pending, running, succeeded, failed, cancelled, unavailable, and
   stale-last-known-good states to renderers.
 
 ### Gate 2—Revision-safe execution proof

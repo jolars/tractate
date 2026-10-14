@@ -1031,6 +1031,17 @@ fn coordinator_adapter_errors_and_unverified_state_never_publish_or_release_uncl
         );
         assert_eq!(coordinator.state(ids[0]), Some(ScheduledCellState::Failed));
         assert_eq!(coordinator.state(ids[1]), Some(ScheduledCellState::Blocked));
+        let view = coordinator.cell_view(ids[0], false).unwrap();
+        assert_eq!(view.state, tractate::CellExecutionState::Failed);
+        assert_eq!(
+            view.diagnostics[0].code,
+            tractate::DiagnosticCode::ExecutionFailed
+        );
+        assert_eq!(
+            view.diagnostics[0].primary,
+            snapshot.evaluation_plan().unwrap().cells[0].origin
+        );
+        assert!(view.result.is_none());
         if matches!(
             fault,
             AdapterFault::Start | AdapterFault::Execute | AdapterFault::Shutdown

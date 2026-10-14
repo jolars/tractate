@@ -522,6 +522,10 @@ fn execution_store_write_failures_publish_nothing_and_poison_the_session() {
         assert!(failed);
         assert_eq!(coordinator.state(id), Some(ScheduledCellState::Failed));
         assert!(coordinator.result(id).is_none());
+        let view = coordinator.cell_view(id, false).unwrap();
+        assert_eq!(view.state, tractate::CellExecutionState::Failed);
+        assert_eq!(view.diagnostics[0].code, DiagnosticCode::ExecutionFailed);
+        assert!(view.result.is_none());
         assert!(coordinator.store().unwrap().load(key).is_none());
         assert_eq!(coordinator.materialized_state_key(request.session_id), None);
         assert_eq!(coordinator.running_count(), 0);
