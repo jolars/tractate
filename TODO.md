@@ -160,7 +160,7 @@ This stage establishes the effect boundary and race safety without depending on 
 
 ### 2.3 Add the scheduler and transactional artifact path
 
-- [ ] Implement a deterministic counting fake runner that can block, fail,
+- [x] Implement a deterministic counting fake runner that can block, fail,
   crash, emit artifacts, and ignore interruption on demand.
 - [ ] Reconcile a revision's desired requests with pending and running attempts.
 - [ ] Cancel obsolete work when practical, and reject late results by revision,

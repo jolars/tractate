@@ -4,6 +4,13 @@ use std::time::Duration;
 
 use crate::{CellId, Diagnostic, ExecutionKey, SourceRevision};
 
+mod fake;
+
+pub use fake::{
+    FakeArtifact, FakeCompletion, FakeRunner, FakeRunnerError, FakeRunnerEvent, FakeRunnerState,
+    FakeScript, FakeStep,
+};
+
 /// A single dispatch, unique within its owning execution coordinator.
 ///
 /// Retries receive new IDs, even when the cell and execution key are unchanged.

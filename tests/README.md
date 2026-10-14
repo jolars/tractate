@@ -52,6 +52,16 @@ continue without waiting for it. Empty and disabled plans finish immediately.
 Invalid plans constructed by callers and progress updates are rejected without
 releasing slots or advancing successors.
 
+`fake_runner.rs` exercises the public scripted runner without processes,
+threads, filesystem writes, or elapsed-time assumptions. Repeated polling at
+explicit gates preserves deterministic output, artifact bytes, and provenance.
+Tests cover accepted-dispatch counts, predecessor checks, provisional success,
+partial output on failure and crash, reset and restart, cooperative
+cancellation, ignored interruption with late success, and forced shutdown. A
+blocked fake session shares the bounded evaluation schedule with an unrelated
+session and an isolated cell, which both finish before the blocked attempt is
+released.
+
 `slide_changes.rs` checks the public slide difference API across insertion,
 deletion, reordering combined with modification, title and boundary edits,
 identical updates, path changes, repeated boundaries, source gaps, invalid

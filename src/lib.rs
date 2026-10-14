@@ -21,6 +21,7 @@ pub use document::{
 
 pub use execution::{
     ArtifactId, ArtifactReference, AttemptId, DisplayBundle, DisplayRepresentation,
-    ExecutionOutcome, ExecutionProvenance, ExecutionRequest, ExecutionStatus, OutputEvent,
-    OutputPayload, RepresentationKind, RunnerIdentity, SessionId, StateKey,
+    ExecutionOutcome, ExecutionProvenance, ExecutionRequest, ExecutionStatus, FakeArtifact,
+    FakeCompletion, FakeRunner, FakeRunnerError, FakeRunnerEvent, FakeRunnerState, FakeScript,
+    FakeStep, OutputEvent, OutputPayload, RepresentationKind, RunnerIdentity, SessionId, StateKey,
 };

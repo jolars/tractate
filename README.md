@@ -62,8 +62,18 @@ cells across independent sessions and isolated cells. `reserve_next()` selects
 ready cells in document order within the global limit. Report accepted outcomes
 with `complete()` to release slots and advance successful session chains.
 Failures and cancellations block only their own session suffix. This queue
-tracks progress in memory without starting runners. Execution keys, interpreter
-state, and revision-safe dispatch remain later stages.
+tracks progress in memory without starting runners. The effectful coordinator
+still needs to validate revisions and publish results.
+
+Use `FakeRunner` for deterministic tests at the execution boundary. Start a
+session, then `dispatch()` a request, its planned resulting state key, and a
+`FakeScript`. Each `poll()` delivers one output event, provisional artifact, or
+terminal report. A `FakeStep::Block` keeps polling pending until `release()`
+opens its gate. Scripts can fail, crash, or ignore interruption to reproduce
+late completions. Durations come from scripts, and accepted dispatch counts
+survive resets and restarts. Validate a provisional success before calling
+`accept_success()` to advance state; discard an obsolete success instead. The
+fake records source code without interpreting it.
 
 Render a source-only presentation with:
 
