@@ -162,12 +162,12 @@ This stage establishes the effect boundary and race safety without depending on 
 
 - [x] Implement a deterministic counting fake runner that can block, fail,
   crash, emit artifacts, and ignore interruption on demand.
-- [ ] Reconcile a revision's desired requests with pending and running attempts.
-- [ ] Cancel obsolete work when practical, and reject late results by revision,
+- [x] Reconcile a revision's desired requests with pending and running attempts.
+- [x] Cancel obsolete work when practical, and reject late results by revision,
   attempt ID, execution key, and predecessor-state key.
-- [ ] Never advance a session state key after stale, failed, cancelled, or
+- [x] Never advance a session state key after stale, failed, cancelled, or
   protocol-invalid work.
-- [ ] Poison an uncertain stateful runner and reconstruct state in a fresh
+- [x] Poison an uncertain stateful runner and reconstruct state in a fresh
   runner by replaying the valid prefix.
 - [ ] Store provisional artifacts by content digest, then atomically commit a
   result record only after publication checks pass.

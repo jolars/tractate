@@ -20,8 +20,10 @@ pub use document::{
 };
 
 pub use execution::{
-    ArtifactId, ArtifactReference, AttemptId, DisplayBundle, DisplayRepresentation,
-    ExecutionOutcome, ExecutionProvenance, ExecutionRequest, ExecutionStatus, FakeArtifact,
-    FakeCompletion, FakeRunner, FakeRunnerError, FakeRunnerEvent, FakeRunnerState, FakeScript,
-    FakeStep, OutputEvent, OutputPayload, RepresentationKind, RunnerIdentity, SessionId, StateKey,
+    AcceptedExecution, ArtifactId, ArtifactReference, AttemptId, AttemptReport,
+    CompletionDisposition, CoordinatorError, DisplayBundle, DisplayRepresentation,
+    ExecutionCoordinator, ExecutionOutcome, ExecutionProvenance, ExecutionRequest, ExecutionRunner,
+    ExecutionStatus, FakeArtifact, FakeCompletion, FakeRunner, FakeRunnerError, FakeRunnerEvent,
+    FakeRunnerState, FakeScript, FakeStep, OutputEvent, OutputPayload, ProvisionalArtifact,
+    RejectionReason, RepresentationKind, RunnerEvent, RunnerIdentity, SessionId, StateKey,
 };

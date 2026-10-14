@@ -5,8 +5,9 @@ use std::fmt;
 use std::time::Duration;
 
 use super::{
-    ArtifactReference, AttemptId, ExecutionOutcome, ExecutionProvenance, ExecutionRequest,
-    ExecutionStatus, OutputEvent, OutputPayload, RunnerIdentity, SessionId, StateKey,
+    AttemptId, ExecutionOutcome, ExecutionProvenance, ExecutionRequest, ExecutionRunner,
+    ExecutionStatus, OutputEvent, OutputPayload, ProvisionalArtifact, RunnerEvent, RunnerIdentity,
+    SessionId, StateKey,
 };
 use crate::{CellId, Diagnostic};
 
@@ -14,11 +15,7 @@ use crate::{CellId, Diagnostic};
 ///
 /// The fake does not write files or assign content digests. The receiving
 /// artifact store owns staging, verification, and transactional publication.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FakeArtifact {
-    pub reference: ArtifactReference,
-    pub bytes: Vec<u8>,
-}
+pub type FakeArtifact = ProvisionalArtifact;
 
 /// An observable effect or an explicit pause in one attempt's script.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -68,15 +65,7 @@ pub enum FakeRunnerState {
 }
 
 /// One effect delivered by polling; terminal events are delivered exactly once.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum FakeRunnerEvent {
-    Output(OutputEvent),
-    Artifact {
-        request: ExecutionRequest,
-        artifact: FakeArtifact,
-    },
-    Complete(ExecutionOutcome),
-}
+pub type FakeRunnerEvent = RunnerEvent;
 
 /// A command rejected before changing state or counting a dispatch.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -173,6 +162,7 @@ pub struct FakeRunner {
     requests: Vec<ExecutionRequest>,
     active: Option<ActiveAttempt>,
     successful: Option<(AttemptId, Option<StateKey>)>,
+    scripts: VecDeque<FakeScript>,
 }
 
 impl FakeRunner {
@@ -189,6 +179,7 @@ impl FakeRunner {
             requests: Vec::new(),
             active: None,
             successful: None,
+            scripts: VecDeque::new(),
         }
     }
 
@@ -460,6 +451,12 @@ impl FakeRunner {
         self.active.as_ref().is_some_and(|active| active.blocked)
     }
 
+    /// Supply effects for the next coordinator dispatch, including prefix replay.
+    /// An empty queue supplies a successful, empty script.
+    pub fn queue_script(&mut self, script: FakeScript) {
+        self.scripts.push_back(script);
+    }
+
     fn require_state(
         &self,
         operation: &'static str,
@@ -481,5 +478,47 @@ impl FakeRunner {
         } else {
             Err(FakeRunnerError::WrongAttempt { expected, actual })
         }
+    }
+}
+
+impl ExecutionRunner for FakeRunner {
+    type Error = FakeRunnerError;
+
+    fn identity(&self) -> &RunnerIdentity {
+        self.identity()
+    }
+
+    fn materialized_state_key(&self) -> Option<StateKey> {
+        self.materialized_state_key()
+    }
+
+    fn start(&mut self, initial_state_key: Option<StateKey>) -> Result<(), Self::Error> {
+        self.start(initial_state_key)
+    }
+
+    fn execute(
+        &mut self,
+        request: ExecutionRequest,
+        resulting_state_key: Option<StateKey>,
+    ) -> Result<(), Self::Error> {
+        let script = self.scripts.pop_front().unwrap_or_default();
+        self.dispatch(request, resulting_state_key, script)
+    }
+
+    fn poll(&mut self) -> Option<RunnerEvent> {
+        self.poll()
+    }
+
+    fn interrupt(&mut self) {
+        self.interrupt();
+    }
+
+    fn accept_success(&mut self, attempt_id: AttemptId) -> Result<(), Self::Error> {
+        self.accept_success(attempt_id)
+    }
+
+    fn shutdown(&mut self) -> Result<(), Self::Error> {
+        self.shutdown();
+        Ok(())
     }
 }

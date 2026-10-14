@@ -62,6 +62,17 @@ blocked fake session shares the bounded evaluation schedule with an unrelated
 session and an isolated cell, which both finish before the blocked attempt is
 released.
 
+`execution_coordinator.rs` checks revision reconciliation through the counting
+fake runner, including pending edits, prose-only reuse, suffix invalidation,
+physical prefix replay, retries, and fresh process incarnations. Cooperative
+cancellation and ignored interruption both reject late output and success. Tests
+validate completion identities and event order before accepting results or
+advancing interpreter state. Failure, crash, cancellation, and replay failure
+block only the affected suffix, preserve valid prefix output, and allow
+unrelated sessions to finish. Deterministic output from a fake adapter compares
+incremental and clean full builds across prose edits, code edits, disabled
+cells, session moves, deletion, restoration, LF, and CRLF.
+
 `slide_changes.rs` checks the public slide difference API across insertion,
 deletion, reordering combined with modification, title and boundary edits,
 identical updates, path changes, repeated boundaries, source gaps, invalid

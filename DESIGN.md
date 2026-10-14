@@ -1074,8 +1074,8 @@ match the conservative stateful chains.
 This schedule only tracks structural progress in memory. Reserving a cell does
 not start a runner or authorize execution. The effectful coordinator must
 validate revision, attempt, execution key, and predecessor state before
-reporting a completion. Revision reconciliation, retries, and result publication
-remain part of the later scheduler work.
+reporting a completion. The effectful `ExecutionCoordinator` implements revision
+reconciliation and retries. Persistent result publication remains later work.
 
 `EvaluationPlan::keyed(inputs)` adds execution and cumulative state keys in a
 pure second pass. Every enabled cell requires `ExecutionInputs` containing an
@@ -1969,6 +1969,22 @@ On completion, the scheduler first writes provisional artifacts, then verifies
 the source revision, execution key, predecessor-state key, and attempt ID. Only
 a current request may commit a result or advance a session's materialized state
 key. A stale completion is discarded.
+
+`ExecutionCoordinator` currently implements this acceptance boundary in memory
+using the `ExecutionRunner` adapter contract and the counting fake runner.
+Reconciliation retains matching logical results, replaces pending work with the
+current keyed plan, and revokes older running attempts. Graceful interruption
+does not release a concurrency slot until the attempt terminates. Explicit
+forced cleanup handles runners that ignore interruption; cleanup failures keep
+their slots occupied.
+
+The coordinator validates dispatch identities, runner incarnations, and the
+complete ordered event stream before accepting success. Failed, cancelled,
+stale, and protocol-invalid attempts leave no verified interpreter state.
+Further execution starts a fresh incarnation and replays the current valid
+prefix. Replay advances physical state without replacing retained logical prefix
+outputs. Accepted artifact bytes remain provisional in memory; content-addressed
+storage and atomic persistent publication remain later work.
 
 --------------------------------------------------------------------------------
 

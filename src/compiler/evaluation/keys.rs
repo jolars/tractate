@@ -80,6 +80,8 @@ pub struct KeyedCell<'plan> {
     /// The state a verified successful execution would materialize, never proof
     /// that execution happened. Isolated computations do not advance a session.
     pub resulting_state_key: Option<StateKey>,
+    /// Retained authorization token for volatile work, including isolated cells.
+    pub volatile_nonce: Option<[u8; 32]>,
 }
 
 impl KeyedCell<'_> {
@@ -193,6 +195,7 @@ impl EvaluationPlan {
                 execution_key,
                 required_predecessor_state_key: required,
                 resulting_state_key,
+                volatile_nonce: input.volatile_nonce,
             });
         }
         Ok(KeyedEvaluationPlan {

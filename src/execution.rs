@@ -4,7 +4,15 @@ use std::time::Duration;
 
 use crate::{CellId, Diagnostic, ExecutionKey, SourceRevision};
 
+mod coordinator;
 mod fake;
+mod runner;
+
+pub use coordinator::{
+    AcceptedExecution, AttemptReport, CompletionDisposition, CoordinatorError,
+    ExecutionCoordinator, RejectionReason,
+};
+pub use runner::{ExecutionRunner, ProvisionalArtifact, RunnerEvent};
 
 pub use fake::{
     FakeArtifact, FakeCompletion, FakeRunner, FakeRunnerError, FakeRunnerEvent, FakeRunnerState,
