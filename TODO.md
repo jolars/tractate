@@ -177,18 +177,18 @@ This stage establishes the effect boundary and race safety without depending on 
 
 ### Gate 2—Revision-safe execution proof
 
-- [ ] A counting fake runner proves that a prose-only edit executes zero cells.
-- [ ] In `A -> B -> C -> D`, editing `C` preserves the logical results of `A`
+- [x] A counting fake runner proves that a prose-only edit executes zero cells.
+- [x] In `A -> B -> C -> D`, editing `C` preserves the logical results of `A`
   and `B`, replays them when necessary, and executes only the invalidated
   suffix.
-- [ ] Concurrent unrelated sessions can finish when one session fails.
-- [ ] A late result from an obsolete revision changes neither visible output,
+- [x] Concurrent unrelated sessions can finish when one session fails.
+- [x] A late result from an obsolete revision changes neither visible output,
   committed cache records, nor materialized session state.
-- [ ] Failed, cancelled, crashed, partial, and corrupt outcomes never become
+- [x] Failed, cancelled, crashed, partial, and corrupt outcomes never become
   successful cache hits.
-- [ ] Incremental and clean full builds agree for deterministic fake-runner
+- [x] Incremental and clean full builds agree for deterministic fake-runner
   fixtures.
-- [ ] `task check` passes.
+- [x] `task check` passes.
 
 ## Stage 3—Run R and render its results
 
