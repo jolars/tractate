@@ -1,4 +1,8 @@
-//! Explicit, effectful discovery of the R interpreter.
+//! Explicit, effectful discovery and control of the R interpreter.
+
+mod bridge;
+
+pub use bridge::{RBridge, REvaluation};
 
 use std::ffi::OsStr;
 use std::fmt;

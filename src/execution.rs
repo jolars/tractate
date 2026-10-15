@@ -17,7 +17,7 @@ pub use coordinator::{
     AcceptedExecution, AttemptReport, CompletionDisposition, CoordinatorError,
     ExecutionCoordinator, RejectionReason,
 };
-pub use r::{RDiscoveryError, RInstallation};
+pub use r::{RBridge, RDiscoveryError, REvaluation, RInstallation};
 pub use runner::{ExecutionRunner, ProvisionalArtifact, RunnerEvent};
 pub use store::ExecutionStore;
 pub use view::{CellExecutionState, CellExecutionView};
