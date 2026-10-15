@@ -197,7 +197,7 @@ semantics.
 
 ### 3.1 Build the R bridge
 
-- [ ] Discover R and record its executable and version as runner identity.
+- [x] Discover R and record its executable and version as runner identity.
 - [ ] Implement a small R runtime shim using a framed control channel that user
   stdout and stderr cannot imitate.
 - [ ] Tag requests and events with session, cell, attempt, and sequence IDs.

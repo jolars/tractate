@@ -8,6 +8,7 @@ use crate::{CellId, Diagnostic, ExecutionKey, SourceRevision};
 
 mod coordinator;
 mod fake;
+mod r;
 mod runner;
 mod store;
 mod view;
@@ -16,6 +17,7 @@ pub use coordinator::{
     AcceptedExecution, AttemptReport, CompletionDisposition, CoordinatorError,
     ExecutionCoordinator, RejectionReason,
 };
+pub use r::{RDiscoveryError, RInstallation};
 pub use runner::{ExecutionRunner, ProvisionalArtifact, RunnerEvent};
 pub use store::ExecutionStore;
 pub use view::{CellExecutionState, CellExecutionView};

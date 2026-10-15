@@ -25,6 +25,6 @@ pub use execution::{
     DisplayRepresentation, ExecutionCoordinator, ExecutionOutcome, ExecutionProvenance,
     ExecutionRequest, ExecutionRunner, ExecutionStatus, ExecutionStore, FakeArtifact,
     FakeCompletion, FakeRunner, FakeRunnerError, FakeRunnerEvent, FakeRunnerState, FakeScript,
-    FakeStep, OutputEvent, OutputPayload, ProvisionalArtifact, RejectionReason, RepresentationKind,
-    RunnerEvent, RunnerIdentity, SessionId, StateKey,
+    FakeStep, OutputEvent, OutputPayload, ProvisionalArtifact, RDiscoveryError, RInstallation,
+    RejectionReason, RepresentationKind, RunnerEvent, RunnerIdentity, SessionId, StateKey,
 };
