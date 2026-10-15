@@ -11,6 +11,16 @@
   ]
   ++ pkgs.lib.optionals pkgs.stdenv.isLinux [ pkgs.strace ];
 
+  languages.r = {
+    enable = true;
+    package = pkgs.rWrapper.override {
+      packages = with pkgs.rPackages; [
+        knitr
+        rmarkdown
+      ];
+    };
+  };
+
   languages.rust = {
     enable = true;
     toolchainFile = ./rust-toolchain.toml;
